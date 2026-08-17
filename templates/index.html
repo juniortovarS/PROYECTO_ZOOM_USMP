@@ -113,10 +113,10 @@
     </header>
 
     <!-- Main Workspace Container -->
-    <main class="max-w-[96%] mx-auto w-full px-6 py-8 flex-grow">
+    <main class="max-w-[98%] sm:max-w-[96%] mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 flex-grow">
         
         <!-- Stats Summary Grid -->
-        <div id="stats-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        <div id="stats-container" class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 mb-6 sm:mb-8">
             <!-- Stat 1: Total Users -->
             <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center justify-between transition-all duration-300 hover:shadow-md">
                 <div>
@@ -216,39 +216,35 @@
                 <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col flex-grow">
                     
                     <!-- Search and Filters Bar -->
-                    <div class="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div class="relative flex-grow flex space-x-2">
-                            <div class="relative flex-grow max-w-sm">
+                    <div class="p-4 sm:p-6 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                        <div class="relative flex-grow flex flex-col sm:flex-row gap-2">
+                            <div class="relative flex-grow max-w-full sm:max-w-md">
                                 <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                                 </span>
-                                <input type="text" id="search-input" placeholder="Buscar por usuario (nombre/apellido), correo, grupo, licencia o estado..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm transition-all focus:bg-white focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF]">
+                                <input type="text" id="search-input" placeholder="Buscar por usuario, correo, grupo, licencia..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm transition-all focus:bg-white focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF]">
                             </div>
-                            <button id="btn-search" class="px-5 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/10 hover:-translate-y-0.5 transition-all duration-200">
-                                Buscar
-                            </button>
-                            <button onclick="downloadExcel()" class="px-4 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/10 hover:-translate-y-0.5 transition-all duration-200 flex items-center space-x-1.5 whitespace-nowrap">
-                                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                </svg>
-                                <span>Descargar Excel</span>
-                            </button>
-                            <button onclick="triggerCsvImport()" class="px-4 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/10 hover:-translate-y-0.5 transition-all duration-200 flex items-center space-x-1.5 whitespace-nowrap" title="Importar usuarios desde un archivo CSV">
-                                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-                                </svg>
-                                <span>Importar CSV</span>
-                            </button>
-                            <button onclick="openAddUserModal()" class="px-4 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/10 hover:-translate-y-0.5 transition-all duration-200 flex items-center space-x-1.5 whitespace-nowrap" title="Agregar un nuevo usuario y asignarle grupo/licencia">
-                                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path>
-                                </svg>
-                                <span>Agregar Usuario</span>
-                            </button>
-                            <input type="file" id="csv-file-input" class="hidden" accept=".csv" onchange="handleCsvFileSelected(event)">
+                            <div class="flex items-center space-x-2 overflow-x-auto pb-1 sm:pb-0">
+                                <button id="btn-search" class="px-4 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md transition-all whitespace-nowrap">
+                                    Buscar
+                                </button>
+                                <button onclick="downloadExcel()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold rounded-xl transition-all flex items-center space-x-1 whitespace-nowrap">
+                                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                    <span>Excel</span>
+                                </button>
+                                <button onclick="triggerCsvImport()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold rounded-xl transition-all flex items-center space-x-1 whitespace-nowrap" title="Importar CSV">
+                                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                                    <span>CSV</span>
+                                </button>
+                                <button onclick="openAddUserModal()" class="px-3.5 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] text-white text-xs font-extrabold rounded-xl shadow-sm transition-all flex items-center space-x-1 whitespace-nowrap">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                                    <span>+ Usuario</span>
+                                </button>
+                                <input type="file" id="csv-file-input" class="hidden" accept=".csv" onchange="handleCsvFileSelected(event)">
+                            </div>
                         </div>
                         
-                        <div class="flex items-center space-x-2.5">
+                        <div class="flex items-center justify-between sm:justify-end space-x-2.5">
                             <span id="user-count-label" class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">Cargando usuarios...</span>
                         </div>
                     </div>
