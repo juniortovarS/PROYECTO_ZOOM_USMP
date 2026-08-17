@@ -1,0 +1,20 @@
+# Entorno virtual y dependencias
+venv/
+env/
+ENV/
+
+# Variables de entorno y credenciales sensibles (NUNCA subir a GitHub)
+.env
+*.env
+
+# Archivos de caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Archivos del sistema operativo y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

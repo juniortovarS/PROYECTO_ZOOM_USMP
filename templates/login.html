@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso | Zoom USMP Portal</title>
+    <!-- Custom USMP Shield Favicon in USMP Red and Zoom Celeste Color -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16,1 L17.5,4 L20.5,4 L18,6.5 L19,9.5 L16,7.5 L13,9.5 L14,6.5 L11.5,4 L14.5,4 Z' fill='%23D32F2F'/%3E%3Cpath d='M6,8 L26,8 L26,19 C26,25 16,29 16,29 C16,29 6,25 6,19 Z' fill='%232D8CFF' stroke='%23D32F2F' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M16,18.5 L22.4,12.1 L16,9.5 Z M16,18.5 L9.6,12.1 L7,18.5 Z M16,18.5 L9.6,24.9 L16,27.5 Z M16,18.5 L22.4,24.9 L25,18.5 Z' fill='%23FFFFFF'/%3E%3C/svg%3E">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Outfit -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+        /* Custom dynamic animated border */
+        .animated-border {
+            position: relative;
+            background: linear-gradient(to right, #2D8CFF, #D32F2F);
+            height: 4px;
+            width: 100%;
+        }
+        /* Light glassmorphism card */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+        /* Form transitions */
+        .form-container {
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .btn-glow:hover {
+            box-shadow: 0 10px 20px -10px rgba(45, 140, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-center items-center p-4">
+
+    <!-- Auth Card -->
+    <div class="w-full max-w-[440px] glass-card rounded-3xl overflow-hidden shadow-xl transition-all duration-300">
+        <div class="animated-border"></div>
+        
+        <div class="p-8">
+            <!-- Header Logo -->
+            <div class="flex flex-col items-center mb-8">
+                <div class="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#D32F2F] to-[#2D8CFF] text-white font-bold text-2xl shadow-lg mb-3">
+                    Z
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight text-slate-800 leading-none">
+                    Zoom <span class="text-[#D32F2F]">USMP</span>
+                </h1>
+                <p class="text-xs text-slate-400 font-medium tracking-wide mt-2 uppercase">Portal de Licenciamiento</p>
+            </div>
+
+            <!-- View Toggle Tabs -->
+            <div id="tabs-container" class="flex p-1 bg-slate-200/60 rounded-xl mb-6">
+                <button id="tab-login" onclick="switchView('login')" class="flex-1 py-2 text-sm font-semibold text-slate-800 rounded-lg transition-all duration-200 bg-white shadow">
+                    Iniciar Sesión
+                </button>
+                <button id="tab-register" onclick="switchView('register')" class="flex-1 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 rounded-lg transition-all duration-200">
+                    Crear Cuenta
+                </button>
+            </div>
+
+            <!-- Alert Messages -->
+            <div id="alert-box" class="hidden mb-4 p-4 rounded-xl text-xs font-semibold flex items-start space-x-2 border transition-all duration-200">
+                <svg id="alert-icon-error" class="w-4 h-4 flex-shrink-0 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <svg id="alert-icon-success" class="w-4 h-4 flex-shrink-0 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span id="alert-text" class="flex-grow leading-tight"></span>
+            </div>
+
+            <!-- LOGIN FORM -->
+            <form id="login-form" onsubmit="handleLogin(event)" class="form-container space-y-4">
+                <div>
+                    <label for="login-email" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Correo Institucional</label>
+                    <input type="email" id="login-email" required placeholder="ejemplo@usmp.pe" class="w-full px-4 py-3 bg-white text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] rounded-xl outline-none text-sm transition-all">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-1.5">
+                        <label for="login-password" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contraseña</label>
+                        <a href="#" onclick="switchView('forgot')" class="text-[10px] text-[#2D8CFF] hover:underline font-bold">¿Olvidaste tu contraseña?</a>
+                    </div>
+                    <input type="password" id="login-password" required placeholder="••••••••" class="w-full px-4 py-3 bg-white text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] rounded-xl outline-none text-sm transition-all">
+                </div>
+                <button type="submit" id="btn-login-submit" class="btn-glow w-full py-3 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white font-semibold rounded-xl hover:scale-[1.01] transition-all duration-200 flex items-center justify-center space-x-2 shadow-sm">
+                    <span>Ingresar</span>
+                    <svg id="login-spinner" class="animate-spin h-4 w-4 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </form>
+
+            <!-- REGISTER FORM -->
+            <form id="register-form" onsubmit="handleRegister(event)" class="form-container hidden space-y-4">
+                <div>
+                    <label for="register-email" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Correo Institucional (@usmp.pe o @usmpvirtual.edu.pe)</label>
+                    <input type="email" id="register-email" required placeholder="usuario@usmp.pe" class="w-full px-4 py-3 bg-white text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] rounded-xl outline-none text-sm transition-all">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="register-firstname" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nombres</label>
+                        <input type="text" id="register-firstname" required placeholder="Juan" class="w-full px-4 py-3 bg-white text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] rounded-xl outline-none text-sm transition-all">
+                    </div>
+                    <div>
+                        <label for="register-lastname" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Apellidos</label>
+                        <input type="text" id="register-lastname" required placeholder="Pérez" class="w-full px-4 py-3 bg-white text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] rounded-xl outline-none text-sm transition-all">
+                    </div>
+                </div>
+                <div>
+                    <label for="register-password" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Contraseña</label>
+                    <input type="password" id="register-password" required placeholder="••••••••" class="w-full px-4 py-3 bg-white text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F] rounded-xl outline-none text-sm transition-all">
+                </div>
+                <button type="submit" id="btn-register-submit" class="btn-glow w-full py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold rounded-xl hover:scale-[1.01] transition-all duration-200 flex items-center justify-center space-x-2 shadow-sm">
+                    <span>Registrarse</span>
+                    <svg id="register-spinner" class="animate-spin h-4 w-4 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </form>
+
+            <!-- FORGOT PASSWORD FORM -->
+            <form id="forgot-form" onsubmit="handleForgotPassword(event)" class="form-container hidden space-y-4">
+                <div>
+                    <label for="forgot-email" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Correo Institucional</label>
+                    <input type="email" id="forgot-email" required placeholder="usuario@usmp.pe" class="w-full px-4 py-3 bg-white text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] rounded-xl outline-none text-sm transition-all">
+                </div>
+                <div>
+                    <label for="forgot-password" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nueva Contraseña</label>
+                    <input type="password" id="forgot-password" required placeholder="••••••••" class="w-full px-4 py-3 bg-white text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] rounded-xl outline-none text-sm transition-all">
+                </div>
+                <button type="submit" id="btn-forgot-submit" class="btn-glow w-full py-3 bg-gradient-to-r from-red-600 via-[#2D8CFF] to-blue-600 hover:scale-[1.01] text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-sm">
+                    <span>Restablecer Contraseña</span>
+                    <svg id="forgot-spinner" class="animate-spin h-4 w-4 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+                <div class="text-center mt-2">
+                    <a href="#" onclick="switchView('login')" class="text-xs text-slate-500 hover:text-slate-800 font-semibold transition-all">Regresar a Iniciar Sesión</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="text-[10px] text-slate-400 mt-6 text-center">&copy; 2026 Universidad de San Martín de Porres. Todos los derechos reservados.</p>
+
+    <!-- Page Scripts -->
+    <script>
+        let currentMode = 'login';
+
+        function showAlert(message, type) {
+            const alertBox = document.getElementById('alert-box');
+            const alertText = document.getElementById('alert-text');
+            const iconError = document.getElementById('alert-icon-error');
+            const iconSuccess = document.getElementById('alert-icon-success');
+
+            alertText.innerText = message;
+            alertBox.classList.remove('hidden');
+
+            if (type === 'success') {
+                alertBox.className = "mb-4 p-4 rounded-xl text-xs font-semibold flex items-start space-x-2 border bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm";
+                iconSuccess.classList.remove('hidden');
+                iconError.classList.add('hidden');
+            } else {
+                alertBox.className = "mb-4 p-4 rounded-xl text-xs font-semibold flex items-start space-x-2 border bg-rose-50 border-rose-200 text-rose-700 shadow-sm";
+                iconError.classList.remove('hidden');
+                iconSuccess.classList.add('hidden');
+            }
+        }
+
+        function hideAlert() {
+            document.getElementById('alert-box').classList.add('hidden');
+        }
+
+        function switchView(mode) {
+            currentMode = mode;
+            hideAlert();
+
+            const tabLogin = document.getElementById('tab-login');
+            const tabRegister = document.getElementById('tab-register');
+            const tabsContainer = document.getElementById('tabs-container');
+            
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
+            const forgotForm = document.getElementById('forgot-form');
+
+            if (mode === 'login') {
+                tabsContainer.classList.remove('hidden');
+                tabLogin.className = "flex-1 py-2 text-sm font-semibold text-slate-800 rounded-lg transition-all duration-200 bg-white shadow";
+                tabRegister.className = "flex-1 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 rounded-lg transition-all duration-200";
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+                forgotForm.classList.add('hidden');
+            } else if (mode === 'register') {
+                tabsContainer.classList.remove('hidden');
+                tabRegister.className = "flex-1 py-2 text-sm font-semibold text-slate-800 rounded-lg transition-all duration-200 bg-white shadow";
+                tabLogin.className = "flex-1 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 rounded-lg transition-all duration-200";
+                registerForm.classList.remove('hidden');
+                loginForm.classList.add('hidden');
+                forgotForm.classList.add('hidden');
+            } else if (mode === 'forgot') {
+                // Ocultar las pestañas de Login/Registro cuando se está restableciendo la contraseña
+                tabsContainer.classList.add('hidden');
+                forgotForm.classList.remove('hidden');
+                loginForm.classList.add('hidden');
+                registerForm.classList.add('hidden');
+            }
+        }
+
+        function validateDomain(email) {
+            const cleanEmail = email.trim().toLowerCase();
+            return cleanEmail.endsWith('@usmp.pe') || cleanEmail.endsWith('@usmpvirtual.edu.pe');
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            hideAlert();
+
+            const emailInput = document.getElementById('login-email');
+            const passwordInput = document.getElementById('login-password');
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+
+            if (!validateDomain(email)) {
+                showAlert('Acceso denegado: Solo se permiten correos @usmp.pe o @usmpvirtual.edu.pe', 'error');
+                return;
+            }
+
+            const btnSubmit = document.getElementById('btn-login-submit');
+            const spinner = document.getElementById('login-spinner');
+
+            btnSubmit.disabled = true;
+            spinner.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    showAlert('Inicio de sesión exitoso. Redirigiendo...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    showAlert(data.detail || 'Credenciales incorrectas.', 'error');
+                }
+            } catch (error) {
+                showAlert('Error de red al conectar con el servidor.', 'error');
+            } finally {
+                btnSubmit.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            hideAlert();
+
+            const emailInput = document.getElementById('register-email');
+            const passwordInput = document.getElementById('register-password');
+            const firstNameInput = document.getElementById('register-firstname');
+            const lastNameInput = document.getElementById('register-lastname');
+
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            const first_name = firstNameInput.value.trim();
+            const last_name = lastNameInput.value.trim();
+
+            if (!validateDomain(email)) {
+                showAlert('Registro bloqueado: Solo se permiten correos @usmp.pe o @usmpvirtual.edu.pe', 'error');
+                return;
+            }
+
+            if (password.length < 6) {
+                showAlert('La contraseña debe tener al menos 6 caracteres.', 'error');
+                return;
+            }
+
+            const btnSubmit = document.getElementById('btn-register-submit');
+            const spinner = document.getElementById('register-spinner');
+
+            btnSubmit.disabled = true;
+            spinner.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, first_name, last_name })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    showAlert('Cuenta creada con éxito. Por favor, inicia sesión ahora.', 'success');
+                    setTimeout(() => {
+                        switchView('login');
+                        document.getElementById('login-email').value = email;
+                        document.getElementById('login-password').value = '';
+                    }, 2000);
+                } else {
+                    showAlert(data.detail || 'No se pudo crear la cuenta.', 'error');
+                }
+            } catch (error) {
+                showAlert('Error de red al registrar la cuenta.', 'error');
+            } finally {
+                btnSubmit.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+            hideAlert();
+
+            const emailInput = document.getElementById('forgot-email');
+            const passwordInput = document.getElementById('forgot-password');
+            const email = emailInput.value.trim();
+            const new_password = passwordInput.value;
+
+            if (!validateDomain(email)) {
+                showAlert('Restablecimiento bloqueado: Solo se permiten correos @usmp.pe o @usmpvirtual.edu.pe', 'error');
+                return;
+            }
+
+            if (new_password.length < 6) {
+                showAlert('La nueva contraseña debe tener al menos 6 caracteres.', 'error');
+                return;
+            }
+
+            const btnSubmit = document.getElementById('btn-forgot-submit');
+            const spinner = document.getElementById('forgot-spinner');
+
+            btnSubmit.disabled = true;
+            spinner.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, new_password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    showAlert('Contraseña restablecida con éxito. Regresando a Iniciar Sesión...', 'success');
+                    setTimeout(() => {
+                        switchView('login');
+                        document.getElementById('login-email').value = email;
+                        document.getElementById('login-password').value = '';
+                    }, 2000);
+                } else {
+                    showAlert(data.detail || 'No se pudo restablecer la contraseña.', 'error');
+                }
+            } catch (error) {
+                showAlert('Error de red al conectar con el servidor.', 'error');
+            } finally {
+                btnSubmit.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

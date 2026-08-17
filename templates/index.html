@@ -1,0 +1,2353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zoom & USMP License Dashboard</title>
+    <!-- Custom USMP Shield Favicon in USMP Red and Zoom Celeste Color -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16,1 L17.5,4 L20.5,4 L18,6.5 L19,9.5 L16,7.5 L13,9.5 L14,6.5 L11.5,4 L14.5,4 Z' fill='%23D32F2F'/%3E%3Cpath d='M6,8 L26,8 L26,19 C26,25 16,29 16,29 C16,29 6,25 6,19 Z' fill='%232D8CFF' stroke='%23D32F2F' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M16,18.5 L22.4,12.1 L16,9.5 Z M16,18.5 L9.6,12.1 L7,18.5 Z M16,18.5 L9.6,24.9 L16,27.5 Z M16,18.5 L22.4,24.9 L25,18.5 Z' fill='%23FFFFFF'/%3E%3C/svg%3E">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Outfit (modern & premium) -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at 10% 20%, rgba(248, 250, 252, 1) 0%, rgba(241, 245, 249, 1) 90%);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Zoom-USMP Dynamic animated border */
+        .animated-border {
+            position: relative;
+            background: linear-gradient(to right, #2D8CFF, #D32F2F);
+            height: 4px;
+            width: 100%;
+        }
+        /* Glow effect on hover */
+        .btn-glow:hover {
+            box-shadow: 0 0 15px rgba(45, 140, 255, 0.4), 0 0 15px rgba(211, 47, 47, 0.3);
+        }
+        /* Toast notification animation */
+        @keyframes slideIn {
+            from { transform: translateY(100%) scale(0.9); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        .toast-animate {
+            animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        /* Fade-in animation for views switching */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between text-slate-800">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 shadow-sm">
+        <div class="animated-border"></div>
+        <div class="max-w-[96%] mx-auto px-6 py-4 flex items-center justify-between">
+            <!-- Brand Logo -->
+            <div class="flex items-center space-x-3">
+                <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-[#D32F2F] to-[#2D8CFF] text-white font-bold text-xl shadow-md">
+                    Z
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-xl font-bold tracking-tight text-slate-900 leading-none">
+                        Zoom <span class="text-[#D32F2F]">USMP</span>
+                    </span>
+                    <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-1">Portal de Licenciamiento</span>
+                </div>
+            </div>
+
+            <!-- User Profile & Logout -->
+            <div id="user-profile-header" class="hidden md:flex items-center space-x-3 bg-slate-50 border border-slate-200 px-4 py-1.5 rounded-xl shadow-sm">
+                <div id="user-initials" class="flex-shrink-0 h-8 w-8 rounded-lg bg-gradient-to-tr from-[#D32F2F] to-[#2D8CFF] text-white flex items-center justify-center font-bold text-xs">
+                    --
+                </div>
+                <div class="flex flex-col">
+                    <span id="user-display-name" class="text-xs font-bold text-slate-800 leading-none">--</span>
+                    <span id="user-display-email" class="text-[9px] text-slate-400 font-semibold mt-1">--</span>
+                </div>
+                <button onclick="handleLogout()" class="text-xs font-bold text-[#D32F2F] hover:text-[#B71C1C] transition-colors duration-150 pl-3 border-l border-slate-200">
+                    Salir
+                </button>
+            </div>
+
+            <!-- Server State & Fast Actions -->
+            <div class="flex items-center space-x-6">
+                <!-- Refresh Button -->
+                <button onclick="resetAndRefresh()" class="flex items-center space-x-1.5 px-3.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold transition-all duration-200">
+                    <svg id="refresh-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.25M6 18H3.25m0 0v-5m0 5h5"></path>
+                    </svg>
+                    <span>Actualizar Dashboard</span>
+                </button>
+                <div class="flex items-center space-x-2">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Activo</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <main class="max-w-[96%] mx-auto w-full px-6 py-8 flex-grow">
+        
+        <!-- Stats Summary Grid -->
+        <div id="stats-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            <!-- Stat 1: Total Users -->
+            <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center justify-between transition-all duration-300 hover:shadow-md">
+                <div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Usuarios</p>
+                    <h3 id="stat-total" class="text-3xl font-bold text-slate-800 mt-1">0</h3>
+                </div>
+                <div class="p-3.5 bg-slate-50 rounded-xl text-slate-500">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                </div>
+            </div>
+            <!-- Stat 2: Licensed Users -->
+            <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center justify-between transition-all duration-300 hover:shadow-md">
+                <div>
+                    <p id="stat-licensed-label" class="text-xs font-bold text-[#2D8CFF] uppercase tracking-wider">Licenciados (Pág. Actual)</p>
+                    <h3 id="stat-licensed" class="text-3xl font-bold text-slate-800 mt-1">0</h3>
+                </div>
+                <div class="p-3.5 bg-blue-50 rounded-xl text-[#2D8CFF]">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                </div>
+            </div>
+            <!-- Stat 3: Pending Users (Total global Zoom portal) -->
+            <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center justify-between transition-all duration-300 hover:shadow-md">
+                <div>
+                    <p id="stat-pending-label" class="text-xs font-bold text-amber-500 uppercase tracking-wider">Pendientes (Total Zoom)</p>
+                    <h3 id="stat-pending" class="text-3xl font-bold text-slate-800 mt-1">0</h3>
+                </div>
+                <div class="p-3.5 bg-amber-50 rounded-xl text-amber-500">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                </div>
+            </div>
+            <!-- Stat 4: Total Licenses -->
+            <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center justify-between transition-all duration-300 hover:shadow-md">
+                <div>
+                    <p class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Licencias Totales</p>
+                    <h3 id="stat-licenses" class="text-3xl font-bold text-slate-800 mt-1">0</h3>
+                    <p id="stat-licenses-detail" class="text-[10px] text-slate-400 font-semibold mt-1">Disponibles: 0</p>
+                </div>
+                <div id="stat-licenses-icon-container" class="p-3.5 bg-emerald-50 rounded-xl text-emerald-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"></path>
+                    </svg>
+                </div>
+            </div>
+            <!-- Stat 5: Groups Count -->
+            <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center justify-between transition-all duration-300 hover:shadow-md">
+                <div>
+                    <p class="text-xs font-bold text-[#D32F2F] uppercase tracking-wider">Grupos Zoom</p>
+                    <h3 id="stat-groups" class="text-3xl font-bold text-slate-800 mt-1">0</h3>
+                </div>
+                <div class="p-3.5 bg-red-50 rounded-xl text-[#D32F2F]">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div id="tabs-container" class="hidden flex items-center space-x-2 border-b border-slate-200 mb-8">
+            <button onclick="switchTab('dashboard')" id="tab-dashboard" class="px-5 py-3 text-sm font-semibold border-b-2 border-[#2D8CFF] text-[#2D8CFF] focus:outline-none transition-all duration-150 flex items-center space-x-2">
+                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                <span>Gestión de Licencias</span>
+            </button>
+            <button onclick="switchTab('logs')" id="tab-logs" class="px-5 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 focus:outline-none transition-all duration-150 flex items-center space-x-2">
+                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                <span>Operaciones</span>
+            </button>
+        </div>
+
+        <!-- Dashboard Layout Split -->
+        <div id="dashboard-view" class="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
+            
+            <!-- Left Side: Groups List (Width 3/12) -->
+            <div class="lg:col-span-3">
+                <!-- Groups List Card -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="p-6 border-b border-slate-100 flex items-center space-x-2.5">
+                        <span class="p-2 bg-blue-50 rounded-lg text-[#2D8CFF]">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        </span>
+                        <h2 class="text-base font-bold text-slate-800 font-semibold">Grupos en Zoom</h2>
+                    </div>
+                    <div class="px-6 py-2 bg-slate-50 border-b border-slate-100 text-[10px] text-slate-400 font-medium leading-tight">
+                        Haz clic en un grupo para filtrar los usuarios y ver solo sus miembros.
+                    </div>
+                    <div id="groups-list-container" class="p-6 space-y-2.5 max-h-[580px] overflow-y-auto">
+                        <div class="flex items-center justify-center py-6">
+                            <svg class="animate-spin h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Table & Search (Width 9/12 - Wide screen layout) -->
+            <div class="lg:col-span-9 flex flex-col">
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col flex-grow">
+                    
+                    <!-- Search and Filters Bar -->
+                    <div class="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div class="relative flex-grow flex space-x-2">
+                            <div class="relative flex-grow max-w-sm">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                </span>
+                                <input type="text" id="search-input" placeholder="Buscar por usuario (nombre/apellido), correo, grupo, licencia o estado..." class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm transition-all focus:bg-white focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF]">
+                            </div>
+                            <button id="btn-search" class="px-5 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/10 hover:-translate-y-0.5 transition-all duration-200">
+                                Buscar
+                            </button>
+                            <button onclick="downloadExcel()" class="px-4 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/10 hover:-translate-y-0.5 transition-all duration-200 flex items-center space-x-1.5 whitespace-nowrap">
+                                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <span>Descargar Excel</span>
+                            </button>
+                            <button onclick="triggerCsvImport()" class="px-4 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/10 hover:-translate-y-0.5 transition-all duration-200 flex items-center space-x-1.5 whitespace-nowrap" title="Importar usuarios desde un archivo CSV">
+                                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                                </svg>
+                                <span>Importar CSV</span>
+                            </button>
+                            <button onclick="openAddUserModal()" class="px-4 py-2 bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md hover:shadow-blue-500/10 hover:-translate-y-0.5 transition-all duration-200 flex items-center space-x-1.5 whitespace-nowrap" title="Agregar un nuevo usuario y asignarle grupo/licencia">
+                                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                <span>Agregar Usuario</span>
+                            </button>
+                            <input type="file" id="csv-file-input" class="hidden" accept=".csv" onchange="handleCsvFileSelected(event)">
+                        </div>
+                        
+                        <div class="flex items-center space-x-2.5">
+                            <span id="user-count-label" class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">Cargando usuarios...</span>
+                        </div>
+                    </div>
+
+                    <!-- Search Note -->
+                    <div id="search-note" class="hidden px-6 py-2 bg-amber-50 border-b border-slate-100 text-[10px] text-amber-700 font-semibold flex items-center space-x-1">
+                        <svg class="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        <span>Mostrando resultado individual desde Zoom. Limpia el buscador y presiona Buscar para regresar al listado.</span>
+                    </div>
+
+                    <!-- Group Filter Note -->
+                    <div id="group-filter-note" class="hidden px-6 py-3 bg-blue-50 border-b border-blue-100 flex items-center justify-between text-xs text-blue-800 font-semibold">
+                        <div class="flex items-center space-x-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#2D8CFF] animate-pulse"></span>
+                            <span>Mostrando miembros del grupo: <strong id="filter-group-name" class="text-blue-900">FCCTP</strong></span>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <button id="btn-remove-licenses-mass" onclick="confirmRemoveLicensesMass()" class="px-4 py-2 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white text-xs font-extrabold rounded-xl shadow-sm hover:shadow-md hover:shadow-red-500/15 hover:-translate-y-0.5 transition-all duration-200 flex items-center space-x-1.5">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                <span>Quitar licencia Masiva</span>
+                            </button>
+                            <button onclick="clearGroupFilter()" class="text-[#D32F2F] hover:underline font-bold focus:outline-none flex items-center space-x-1">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                <span>Mostrar todos los usuarios</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Users Table (With balanced widths for no horizontal scroll) -->
+                    <div class="overflow-x-auto flex-grow max-h-[600px]">
+                        <table class="min-w-full divide-y divide-slate-100 table-fixed">
+                            <thead class="bg-slate-50 sticky top-0 z-10">
+                                <tr>
+                                    <th scope="col" class="w-1/3 px-6 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Usuario</th>
+                                    <th scope="col" class="w-1/3 px-6 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Correo</th>
+                                    <th scope="col" id="th-licencia" onclick="toggleLicenseFilter()" class="w-1/6 px-6 py-3.5 text-left text-xs font-bold text-slate-400 hover:text-[#2D8CFF] cursor-pointer transition-colors duration-150 uppercase tracking-wider select-none" title="Haz clic para filtrar por licencia">
+                                        <div class="flex items-center space-x-1">
+                                            <span>Licencia</span>
+                                            <svg id="license-filter-icon" class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
+                                            </svg>
+                                        </div>
+                                    </th>
+                                    <th scope="col" class="w-1/6 px-6 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Su grupo</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-table-body" class="bg-white divide-y divide-slate-100">
+                                <tr class="animate-pulse">
+                                    <td class="px-6 py-4"><div class="h-4 bg-slate-200 rounded w-2/3"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-slate-200 rounded w-3/4"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-slate-200 rounded w-1/2"></div></td>
+                                    <td class="px-6 py-4"><div class="h-4 bg-slate-200 rounded w-1/3"></div></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination Controls -->
+                    <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                        <span id="pagination-info" class="text-xs font-semibold text-slate-500">Mostrando 0-0 de 0 usuarios</span>
+                        <div class="flex items-center space-x-2">
+                            <button id="btn-prev" disabled class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-bold hover:bg-slate-50 transition-all duration-200 flex items-center space-x-1">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
+                                <span>Anterior</span>
+                            </button>
+                            <button id="btn-next" disabled class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-xs font-bold hover:bg-slate-50 transition-all duration-200 flex items-center space-x-1">
+                                <span>Siguiente</span>
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Activity Logs View -->
+        <div id="logs-view" class="hidden bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col animate-fade-in">
+            <!-- Search and Filters Bar -->
+            <div class="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <span class="p-2 bg-blue-50 rounded-lg text-[#2D8CFF]">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                    </span>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800">Panel de Operaciones - Auditoría</h2>
+                        <p class="text-xs text-slate-400 font-medium">Registro de acciones y cambios de licencias del sistema</p>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <div class="relative max-w-xs">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 pointer-events-none">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </span>
+                        <input type="text" id="logs-search-input" oninput="filterLogsTable()" placeholder="Buscar por administrador, afectado, detalle..." class="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] focus:bg-white rounded-xl outline-none text-sm transition-all duration-200 w-72">
+                    </div>
+                    <button onclick="fetchLogs()" class="flex items-center justify-center space-x-1.5 px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all duration-200 shadow-sm">
+                        <svg id="logs-refresh-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.25M6 18H3.25m0 0v-5m0 5h5"></path>
+                        </svg>
+                        <span>Actualizar Historial</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Logs Table -->
+            <div class="overflow-x-auto max-h-[600px]">
+                <table class="min-w-full divide-y divide-slate-100 table-fixed">
+                    <thead class="bg-slate-50 sticky top-0 z-10">
+                        <tr>
+                            <th scope="col" class="w-[18%] px-6 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha y Hora</th>
+                            <th scope="col" class="w-[22%] px-6 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Administrador</th>
+                            <th scope="col" class="w-[12%] px-6 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Acción</th>
+                            <th scope="col" class="w-[23%] px-6 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Usuario Afectado</th>
+                            <th scope="col" class="w-[25%] px-6 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Detalles</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table-body" class="bg-white divide-y divide-slate-100">
+                        <tr>
+                            <td colspan="5" class="px-6 py-12 text-center text-sm text-slate-400 font-medium">
+                                Cargando historial...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Floating Circular AI Assistant Bot Button (Esquina Inferior Derecha) -->
+        <div id="ai-bot-trigger-container" class="fixed bottom-6 right-6 z-50 flex items-center space-x-2">
+            <button onclick="toggleAIPopup()" id="ai-bot-trigger" class="w-14 h-14 rounded-full bg-gradient-to-tr from-[#2D8CFF] to-[#1A73E8] hover:from-[#1A73E8] hover:to-[#1557B0] text-white flex items-center justify-center shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 relative group">
+                <span class="text-2xl transform group-hover:rotate-12 transition-transform duration-300">🤖</span>
+                <!-- Pinging active dot -->
+                <span id="ai-trigger-ping" class="absolute top-0 right-0 flex h-3.5 w-3.5">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white"></span>
+                </span>
+                <!-- Tooltip -->
+                <span class="absolute right-16 bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-md pointer-events-none">
+                    Asistente IA USMP
+                </span>
+            </button>
+        </div>
+
+        <!-- Popup Floating AI Assistant Widget Window -->
+        <div id="ai-floating-popup" class="hidden fixed bottom-24 right-6 z-50 w-[92vw] sm:w-[460px] md:w-[500px] h-[640px] max-h-[82vh] bg-white rounded-2xl shadow-2xl border border-slate-200/80 flex flex-col transition-all duration-300 overflow-hidden">
+            <!-- Header Bar with Minimization & Controls -->
+            <div class="p-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between shadow-md">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-[#2D8CFF] flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                        🤖
+                    </div>
+                    <div class="flex flex-col">
+                        <div class="flex items-center space-x-1.5">
+                            <h3 class="text-xs font-extrabold tracking-wide">Asistente Agéntico IA USMP</h3>
+                            <span id="ai-health-badge" class="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                <span id="ai-health-text">Local</span>
+                            </span>
+                        </div>
+                        <span class="text-[9px] text-slate-300 font-medium">Asistencia inteligente en tiempo real</span>
+                    </div>
+                </div>
+
+                <!-- Header Window Buttons -->
+                <div class="flex items-center space-x-1.5 text-slate-300">
+                    <button onclick="toggleAIMaximize()" title="Maximizar / Restaurar" class="p-1 hover:bg-slate-700 hover:text-white rounded-lg transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    </button>
+                    <button onclick="clearAIChat()" title="Limpiar conversación" class="p-1 hover:bg-slate-700 hover:text-white rounded-lg transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                    <button onclick="toggleAIPopup()" title="Cerrar ventana" class="p-1 hover:bg-slate-700 hover:text-white rounded-lg transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Suggestions Carousel -->
+            <div class="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center space-x-2 overflow-x-auto text-[11px] whitespace-nowrap">
+                <button onclick="sendQuickPrompt('¿Cuáles son las estadísticas generales de licencias y pendientes?')" class="px-2.5 py-0.5 bg-white hover:bg-blue-50 hover:text-[#2D8CFF] border border-slate-200 rounded-full font-semibold text-slate-600 shadow-2xs transition-all">📊 Estadísticas</button>
+                <button onclick="sendQuickPrompt('Analizar si existen anomalías o licencias excedidas')" class="px-2.5 py-0.5 bg-white hover:bg-amber-50 hover:text-amber-700 border border-slate-200 rounded-full font-semibold text-slate-600 shadow-2xs transition-all">🔍 Anomalías</button>
+                <button onclick="sendQuickPrompt('¿Qué facultades están registradas?')" class="px-2.5 py-0.5 bg-white hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200 rounded-full font-semibold text-slate-600 shadow-2xs transition-all">🏛️ Facultades</button>
+                <button onclick="sendQuickPrompt('¿Cómo se manejan las licencias pendientes según la normativa?')" class="px-2.5 py-0.5 bg-white hover:bg-purple-50 hover:text-purple-700 border border-slate-200 rounded-full font-semibold text-slate-600 shadow-2xs transition-all">📖 Normativa</button>
+            </div>
+
+            <!-- Chat Container -->
+            <div id="ai-chat-messages" class="flex-grow p-4 overflow-y-auto space-y-3 bg-slate-50/40 text-xs">
+                <!-- Welcome Message -->
+                <div class="flex items-start space-x-2.5">
+                    <div class="flex-shrink-0 w-7 h-7 rounded-lg bg-[#2D8CFF] text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                        🤖
+                    </div>
+                    <div class="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm max-w-[85%] space-y-1.5 leading-relaxed text-slate-700">
+                        <p class="font-bold text-slate-800">¡Hola! Soy tu Asistente Agéntico Local de la USMP.</p>
+                        <p>Puedo responder tus dudas en tiempo real, filtrar facultades, analizar estadísticas, detectar anomalías o ayudarte a gestionar licencias de Zoom.</p>
+                        <p class="text-[10px] text-slate-400 italic">💡 Mientras chateamos, verás cómo el panel principal de fondo se actualiza automáticamente según lo que pidamos.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input Form -->
+            <div class="p-3 bg-white border-t border-slate-100 flex items-center space-x-3">
+                <input type="text" id="ai-input-message" onkeydown="if(event.key === 'Enter') sendAIMessage()" placeholder="Pídeme algo (ej. Filtra los usuarios de la facultad UVA)..." class="flex-grow px-3.5 py-2.5 bg-slate-50 border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] focus:bg-white rounded-xl outline-none text-xs transition-all">
+                <button id="btn-send-ai" onclick="sendAIMessage()" class="px-4 py-2.5 bg-[#2D8CFF] hover:bg-[#1A73E8] text-white text-xs font-extrabold rounded-xl shadow-sm transition-all flex items-center space-x-1">
+                    <span>Enviar</span>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-white text-center py-5 border-t border-slate-800">
+        <p class="text-xs text-slate-400">&copy; 2026 Universidad de San Martín de Porres (USMP) & Zoom API Gateway</p>
+    </footer>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-3 max-w-sm w-full"></div>
+
+    <!-- Page Logic Script -->
+    <script>
+        let allUsers = [];
+        let backupUsers = [];
+        let allGroups = [];
+        let globalPendingCount = 0;
+        
+        // Paginación State
+        let currentPageSize = 50;
+        let currentPageToken = '';
+        let tokenHistory = []; 
+        let totalRecords = 0;
+        let isSearching = false;
+        let showOnlyLicensed = false;
+        let globalLicensedCount = 0;
+
+        // Filtro de grupo activo
+        let currentGroupId = '';
+        let currentGroupName = '';
+
+        let currentUser = null;
+        let currentUserRole = 'user';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const sessionUser = await checkSession();
+            if (sessionUser) {
+                const email = currentUser && currentUser.email ? currentUser.email.toLowerCase() : '';
+                const isAllowed = email.includes('admin') || email.includes('jtovar');
+                if (isAllowed) {
+                    document.getElementById('tabs-container')?.classList.remove('hidden');
+                } else {
+                    document.getElementById('tabs-container')?.classList.add('hidden');
+                }
+                refreshDashboard();
+            }
+
+            // Configurar botones de paginación
+            document.getElementById('btn-prev').addEventListener('click', handlePrevPage);
+            document.getElementById('btn-next').addEventListener('click', handleNextPage);
+
+            // Configurar buscador global y filtrado en tiempo real con Debounce
+            let searchTimeout = null;
+            document.getElementById('btn-search').addEventListener('click', () => {
+                if (searchTimeout) clearTimeout(searchTimeout);
+                handleSearch();
+            });
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                const query = e.target.value.trim();
+                
+                if (searchTimeout) clearTimeout(searchTimeout);
+                
+                if (!query) {
+                    isSearching = false;
+                    document.getElementById('search-note').classList.add('hidden');
+                    allUsers = [...backupUsers];
+                    renderTable(allUsers);
+                    updateStats(allUsers, totalRecords, globalPendingCount);
+                    updatePaginationControls(document.getElementById('btn-next').dataset.token || '');
+                    const countLabel = document.getElementById('user-count-label');
+                    if (countLabel) {
+                        countLabel.innerText = "Usuarios cargados correctamente";
+                        countLabel.className = "text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg";
+                    }
+                    return;
+                }
+                
+                // Respuesta instantánea en la página actual
+                filterLocalTable(query);
+                
+                // Debounce de 600ms para lanzar la búsqueda global en el grupo/portal
+                searchTimeout = setTimeout(() => {
+                    handleSearch();
+                }, 600);
+            });
+            document.getElementById('search-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    if (searchTimeout) clearTimeout(searchTimeout);
+                    handleSearch();
+                }
+            });
+
+            // Configurar envío del formulario
+            document.getElementById('license-form').addEventListener('submit', handleFormSubmit);
+        });
+
+        // Toggle para la sección colapsable de "Licencias y complementos"
+        function toggleAddons() {
+            const scrollY = window.scrollY;
+            const panel = document.getElementById('license-addons-panel');
+            const chevron = document.getElementById('chevron-icon');
+            if (panel) {
+                panel.classList.toggle('hidden');
+            }
+            if (chevron) {
+                chevron.classList.toggle('rotate-180');
+            }
+            setTimeout(() => {
+                window.scrollTo(window.scrollX, scrollY);
+            }, 0);
+        }
+
+        // Manejar el cambio en el selector de Zoom Workplace
+        function handleWorkplaceChange() {
+            const scrollY = window.scrollY;
+            const select = document.getElementById('workplace-select');
+            const licenseContainer = document.getElementById('zoom-meetings-license-container');
+            const addonsPanel = document.getElementById('license-addons-panel');
+            const chevron = document.getElementById('chevron-icon');
+
+            if (select.value === "2") {
+                licenseContainer.classList.remove('hidden');
+            } else {
+                licenseContainer.classList.add('hidden');
+                if (addonsPanel) addonsPanel.classList.add('hidden');
+                if (chevron) chevron.classList.remove('rotate-180');
+            }
+            setTimeout(() => {
+                window.scrollTo(window.scrollX, scrollY);
+            }, 0);
+        }
+
+        // Cargar datos del usuario en el formulario al hacer clic para editar
+        function editUser(email) {
+            const user = allUsers.find(u => u.email === email);
+            if (!user) return;
+            
+            document.getElementById('email').value = user.email;
+            document.getElementById('firstName').value = user.first_name || '';
+            document.getElementById('lastName').value = user.last_name || '';
+            
+            // Establecer Workplace Licencia
+            const select = document.getElementById('workplace-select');
+            select.value = user.type === 2 ? "2" : "1";
+            handleWorkplaceChange();
+            
+            // Establecer grupo si pertenece a alguno (Búsqueda robusta y priorizando el grupo activo)
+            const groupSelect = document.getElementById('group-select');
+            if (groupSelect && user.groups && user.groups.length > 0) {
+                let activeMatch = null;
+                if (currentGroupId && currentGroupName) {
+                    const hasActive = user.groups.some(gname => 
+                        gname.trim().toLowerCase() === currentGroupName.trim().toLowerCase()
+                    );
+                    if (hasActive) {
+                        activeMatch = allGroups.find(g => g.id === currentGroupId);
+                    }
+                }
+                
+                if (activeMatch) {
+                    groupSelect.value = activeMatch.id;
+                } else {
+                    let matchedGroup = null;
+                    for (const gname of user.groups) {
+                        matchedGroup = allGroups.find(g => 
+                            g.name.trim().toLowerCase() === gname.trim().toLowerCase()
+                        );
+                        if (matchedGroup) break;
+                    }
+                    if (matchedGroup) {
+                        groupSelect.value = matchedGroup.id;
+                    } else {
+                        groupSelect.value = '';
+                    }
+                }
+            } else if (groupSelect && currentGroupId) {
+                // Fallback si el usuario no tiene grupos listados pero estamos en la vista de un grupo específico
+                groupSelect.value = currentGroupId;
+            } else if (groupSelect) {
+                groupSelect.value = '';
+            }
+
+            // Cambiar interfaz al modo de edición
+            document.getElementById('form-title').innerText = "Editar Usuario de Zoom";
+            document.getElementById('btn-submit-text').innerText = "Guardar Cambios";
+        }
+
+        // Cancelar el modo edición y resetear formulario
+        function cancelEdit() {
+            document.getElementById('email').value = '';
+            document.getElementById('firstName').value = '';
+            document.getElementById('lastName').value = '';
+            
+            document.getElementById('workplace-select').value = "2";
+            handleWorkplaceChange();
+
+            const groupSelect = document.getElementById('group-select');
+            if (groupSelect) groupSelect.value = '';
+
+            document.getElementById('form-title').innerText = "Agregar y Licenciar Usuario";
+            document.getElementById('btn-submit-text').innerText = "Asignar Licencia y Grupo";
+        }
+
+        // Controladores para el Modal de Formulario de Usuario
+        function openAddUserModal() {
+            cancelEdit();
+            const modal = document.getElementById('user-form-modal');
+            const content = document.getElementById('user-form-modal-content');
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function openEditUserModal(email) {
+            editUser(email);
+            const modal = document.getElementById('user-form-modal');
+            const content = document.getElementById('user-form-modal-content');
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeUserFormModal() {
+            const modal = document.getElementById('user-form-modal');
+            const content = document.getElementById('user-form-modal-content');
+            
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.remove('flex');
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        // Actualización general
+        function resetAndRefresh() {
+            currentPageToken = '';
+            tokenHistory = [];
+            isSearching = false;
+            document.getElementById('search-input').value = '';
+            document.getElementById('search-note').classList.add('hidden');
+            
+            cancelEdit();
+            clearGroupFilterVisuals();
+            refreshDashboard();
+        }
+
+        function refreshDashboard() {
+            fetchUsers();
+            fetchGroups();
+            fetchLicenses();
+        }
+
+        // Obtener listado de usuarios de Zoom
+        async function fetchUsers() {
+            const refreshIcon = document.getElementById('refresh-icon');
+            const countLabel = document.getElementById('user-count-label');
+            
+            refreshIcon?.classList.add('animate-spin');
+            if (countLabel) {
+                countLabel.innerText = "Cargando usuarios...";
+                countLabel.className = "text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-lg animate-pulse";
+            }
+            
+            try {
+                let url = '';
+                if (currentGroupId) {
+                    url = `/api/groups/${currentGroupId}/members?page_size=${currentPageSize}`;
+                } else {
+                    url = `/api/users?page_size=${currentPageSize}`;
+                }
+
+                if (showOnlyLicensed) {
+                    url += '&user_type=2';
+                }
+
+                if (currentPageToken) {
+                    url += `&next_page_token=${currentPageToken}`;
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'success') {
+                    allUsers = data.users;
+                    backupUsers = [...data.users];
+                    totalRecords = data.total_records;
+                    
+                    if (data.total_pending !== undefined) {
+                        globalPendingCount = data.total_pending;
+                    }
+                    
+                    renderTable(allUsers);
+                    updateStats(allUsers, totalRecords, globalPendingCount);
+                    updatePaginationControls(data.next_page_token);
+
+                    if (countLabel) {
+                        countLabel.innerText = "Usuarios cargados correctamente";
+                        countLabel.className = "text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg";
+                    }
+                } else {
+                    showToast(data.detail || 'Error al obtener usuarios desde la API de Zoom', 'error');
+                    if (countLabel) {
+                        countLabel.innerText = "Error de carga";
+                        countLabel.className = "text-xs font-bold text-red-600 bg-red-50 px-3 py-1 rounded-lg";
+                    }
+                }
+            } catch (error) {
+                showToast('Error de red al conectar con el servidor', 'error');
+                if (countLabel) {
+                    countLabel.innerText = "Error de conexión";
+                    countLabel.className = "text-xs font-bold text-red-600 bg-red-50 px-3 py-1 rounded-lg";
+                }
+            } finally {
+                refreshIcon?.classList.remove('animate-spin');
+            }
+        }
+
+        // Seleccionar un grupo para filtrar miembros
+        function selectGroup(groupId, groupName) {
+            currentGroupId = groupId;
+            currentGroupName = groupName;
+            
+            currentPageToken = '';
+            tokenHistory = [];
+            
+            const note = document.getElementById('group-filter-note');
+            const nameSpan = document.getElementById('filter-group-name');
+            if (note && nameSpan) {
+                note.classList.remove('hidden');
+                nameSpan.innerText = groupName;
+            }
+
+            highlightSelectedGroup(groupId);
+            
+            const query = document.getElementById('search-input').value.trim();
+            if (query) {
+                handleSearch();
+            } else {
+                document.getElementById('search-note').classList.add('hidden');
+                isSearching = false;
+                fetchUsers();
+            }
+        }
+
+        // Limpiar el filtro del grupo
+        function clearGroupFilter() {
+            currentGroupId = '';
+            currentGroupName = '';
+            
+            currentPageToken = '';
+            tokenHistory = [];
+            
+            const note = document.getElementById('group-filter-note');
+            if (note) note.classList.add('hidden');
+
+            highlightSelectedGroup('');
+            
+            const query = document.getElementById('search-input').value.trim();
+            if (query) {
+                handleSearch();
+            } else {
+                fetchUsers();
+            }
+        }
+
+        function clearGroupFilterVisuals() {
+            currentGroupId = '';
+            currentGroupName = '';
+            const note = document.getElementById('group-filter-note');
+            if (note) note.classList.add('hidden');
+            highlightSelectedGroup('');
+        }
+
+        function highlightSelectedGroup(selectedId) {
+            const listContainer = document.getElementById('groups-list-container');
+            if (!listContainer) return;
+
+            const groupDivs = listContainer.querySelectorAll('.group-item-card');
+            groupDivs.forEach(div => {
+                const id = div.dataset.id;
+                if (id === selectedId) {
+                    div.className = "group-item-card cursor-pointer flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-xl transition-all duration-150";
+                } else {
+                    div.className = "group-item-card cursor-pointer flex items-center justify-between p-3 bg-slate-50/60 hover:bg-slate-50 border border-slate-100 rounded-xl transition-all duration-150";
+                }
+            });
+        }
+
+        // Buscar un usuario individual (Buscador Profesional Zoom + BD)
+        async function handleSearch() {
+            const query = document.getElementById('search-input').value.trim();
+            const countLabel = document.getElementById('user-count-label');
+
+            if (!query) {
+                isSearching = false;
+                document.getElementById('search-note').classList.add('hidden');
+                currentPageToken = '';
+                tokenHistory = [];
+                fetchUsers();
+                return;
+            }
+
+            isSearching = true;
+            if (!currentGroupId) {
+                clearGroupFilterVisuals(); 
+            }
+            
+            const tbody = document.getElementById('users-table-body');
+            tbody.innerHTML = `
+                <tr class="animate-pulse">
+                    <td class="px-6 py-4" colspan="4"><div class="h-4 bg-slate-200 rounded w-1/3 mx-auto"></div></td>
+                </tr>
+            `;
+
+            if (countLabel) {
+                countLabel.innerText = "Buscando...";
+                countLabel.className = "text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-lg animate-pulse";
+            }
+            
+            try {
+                let url = `/api/users/search?q=${encodeURIComponent(query)}`;
+                if (currentGroupId) {
+                    url += `&group_id=${currentGroupId}`;
+                }
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    if (data.users && data.users.length > 0) {
+                        allUsers = data.users;
+                        renderTable(data.users);
+                        document.getElementById('search-note').classList.remove('hidden');
+                        document.getElementById('btn-prev').disabled = true;
+                        document.getElementById('btn-next').disabled = true;
+                        const licensedCount = data.users.filter(u => u.type === 2 && !u.not_in_zoom).length;
+                        document.getElementById('pagination-info').innerText = showOnlyLicensed
+                            ? `Mostrando ${licensedCount} resultados de búsqueda con licencia`
+                            : `Mostrando ${data.users.length} resultados de búsqueda`;
+                        if (countLabel) {
+                            const displayedCount = showOnlyLicensed ? licensedCount : data.users.length;
+                            countLabel.innerText = `Búsqueda exitosa: ${displayedCount} usuarios`;
+                            countLabel.className = "text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg";
+                        }
+                    } else {
+                        tbody.innerHTML = `
+                            <tr>
+                                <td colspan="4" class="px-6 py-12 text-center text-sm text-slate-400 font-medium">
+                                    No se encontró ningún usuario con el criterio: <strong>${query}</strong>
+                                </td>
+                            </tr>
+                        `;
+                        document.getElementById('pagination-info').innerText = '0 resultados';
+                        if (countLabel) {
+                            countLabel.innerText = "Búsqueda finalizada";
+                            countLabel.className = "text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg";
+                        }
+                    }
+                } else {
+                    showToast(data.detail || 'Error al realizar la búsqueda', 'error');
+                }
+            } catch (error) {
+                showToast('Error de red al realizar la búsqueda', 'error');
+            }
+        }
+
+        // Filtrado local por nombre, correo o grupo (Búsqueda inteligente por tokens)
+        function filterLocalTable(query) {
+            const tokens = query.toLowerCase().trim().split(/\s+/).filter(t => t.length > 0);
+            if (tokens.length === 0) {
+                renderTable(allUsers);
+                const countLabel = document.getElementById('user-count-label');
+                if (countLabel) {
+                    let totalCount = allUsers.length;
+                    if (showOnlyLicensed) {
+                        totalCount = allUsers.filter(u => u.type === 2 && !u.not_in_zoom).length;
+                    }
+                    countLabel.innerText = `Encontrados: ${totalCount} usuarios`;
+                    countLabel.className = "text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg";
+                }
+                return;
+            }
+            
+            const filtered = allUsers.filter(user => {
+                const fullName = `${user.first_name || ''} ${user.last_name || ''}`.toLowerCase();
+                const email = (user.email || '').toLowerCase();
+                
+                // Mapear licencia a texto
+                const licenseText = user.type === 2 ? 'zoom meetings licensed licenciado' : 'sin asignar basic basico';
+                
+                // Mapear estado a texto
+                let statusText = 'activo active';
+                if (user.not_in_zoom) {
+                    statusText = 'no creado not created bd base datos';
+                } else if (user.status === 'pending') {
+                    statusText = 'pendiente pending';
+                }
+                
+                return tokens.every(token => {
+                    const nameMatch = fullName.includes(token);
+                    const emailMatch = email.includes(token);
+                    const groupMatch = user.groups && user.groups.some(gname => 
+                        gname.toLowerCase().includes(token)
+                    );
+                    const licenseMatch = licenseText.includes(token);
+                    const statusMatch = statusText.includes(token);
+                    
+                    return nameMatch || emailMatch || groupMatch || licenseMatch || statusMatch;
+                });
+            });
+            renderTable(filtered);
+
+            // Actualizar el contador de resultados
+            const countLabel = document.getElementById('user-count-label');
+            if (countLabel) {
+                let matchedCount = filtered.length;
+                if (showOnlyLicensed) {
+                    matchedCount = filtered.filter(u => u.type === 2 && !u.not_in_zoom).length;
+                }
+                countLabel.innerText = `Encontrados: ${matchedCount} usuarios`;
+                countLabel.className = "text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg";
+            }
+        }
+
+        // Controles de Paginación
+        function updatePaginationControls(nextPageTokenFromResponse) {
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
+            const info = document.getElementById('pagination-info');
+
+            if (nextPageTokenFromResponse) {
+                btnNext.disabled = false;
+                btnNext.dataset.token = nextPageTokenFromResponse;
+            } else {
+                btnNext.disabled = true;
+                btnNext.dataset.token = '';
+            }
+
+            if (tokenHistory.length > 0) {
+                btnPrev.disabled = false;
+            } else {
+                btnPrev.disabled = true;
+            }
+
+            const licensedUsers = allUsers.filter(u => u.type === 2 && !u.not_in_zoom);
+            const licensedUsersCount = licensedUsers.length;
+
+            if (showOnlyLicensed) {
+                let totalLicensed = 0;
+                if (currentGroupId) {
+                    const grp = allGroups.find(g => g.id === currentGroupId);
+                    totalLicensed = grp ? (grp.licensed_count || 0) : 0;
+                } else if (isSearching) {
+                    totalLicensed = licensedUsersCount;
+                } else {
+                    totalLicensed = globalLicensedCount;
+                }
+
+                if (isSearching) {
+                    info.innerText = `Mostrando ${licensedUsersCount} resultados de búsqueda con licencia`;
+                } else {
+                    const start = tokenHistory.length * currentPageSize + 1;
+                    const end = start + licensedUsersCount - 1;
+                    if (licensedUsersCount === 0) {
+                        info.innerText = `Mostrando 0-0 de ${totalLicensed} usuarios con licencia`;
+                    } else {
+                        info.innerText = `Mostrando ${start}-${end} de ${totalLicensed} usuarios con licencia`;
+                    }
+                }
+            } else {
+                const start = tokenHistory.length * currentPageSize + 1;
+                const end = start + allUsers.length - 1;
+                
+                if (allUsers.length === 0) {
+                    info.innerText = `Mostrando 0-0 de ${totalRecords} usuarios`;
+                } else {
+                    if (isSearching) {
+                        info.innerText = `Mostrando ${allUsers.length} resultados de búsqueda`;
+                    } else {
+                        info.innerText = `Mostrando ${start}-${end} de ${totalRecords} usuarios`;
+                    }
+                }
+            }
+        }
+
+        function handleNextPage() {
+            const btnNext = document.getElementById('btn-next');
+            const token = btnNext.dataset.token;
+            if (token) {
+                tokenHistory.push(currentPageToken);
+                currentPageToken = token;
+                fetchUsers();
+            }
+        }
+
+        function handlePrevPage() {
+            if (tokenHistory.length > 0) {
+                currentPageToken = tokenHistory.pop();
+                fetchUsers();
+            }
+        }
+
+        // Obtener listado de grupos de Zoom
+        async function fetchGroups() {
+            try {
+                const response = await fetch('/api/groups');
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    allGroups = data.groups;
+                    renderGroupsSelect(allGroups);
+                    renderGroupsList(allGroups);
+                    document.getElementById('stat-groups').innerText = allGroups.length;
+                    
+                    // Si el usuario tiene restricción de grupo y hay grupos cargados, forzar selección por defecto
+                    if (currentUser && currentUser.assigned_group && allGroups.length > 0) {
+                        const matchingGroup = allGroups.find(g => 
+                            g.name.trim().toLowerCase() === currentUser.assigned_group.trim().toLowerCase()
+                        );
+                        if (matchingGroup) {
+                            currentGroupId = matchingGroup.id;
+                            currentGroupName = matchingGroup.name;
+                            
+                            // Mostrar el note visual de filtro
+                            const filterGroupNote = document.getElementById('group-filter-note');
+                            const filterGroupName = document.getElementById('filter-group-name');
+                            if (filterGroupNote && filterGroupName) {
+                                filterGroupNote.classList.remove('hidden');
+                                filterGroupName.innerText = matchingGroup.name;
+                                
+                                // Esconder el botón de "Mostrar todos los usuarios" ya que no está permitido!
+                                const clearFilterBtn = filterGroupNote.querySelector('button[onclick="clearGroupFilter()"]');
+                                if (clearFilterBtn) {
+                                    clearFilterBtn.classList.add('hidden');
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    showToast(data.detail || 'Error al obtener grupos desde la API de Zoom', 'error');
+                }
+            } catch (error) {
+                showToast('Error de red al cargar la lista de grupos', 'error');
+            }
+        }
+
+        // Renderizar opciones del select
+        function renderGroupsSelect(groups) {
+            const select = document.getElementById('group-select');
+            if (!select) return;
+
+            let html = `<option value="">(Predeterminado) Crear o usar 'FCCTP'</option>`;
+            html += groups.map(g => `
+                <option value="${g.id}">${g.name} (${g.licensed_count || 0} con licencia)</option>
+            `).join('');
+
+            select.innerHTML = html;
+        }
+
+        // Renderizar lista física de grupos
+        function renderGroupsList(groups) {
+            const container = document.getElementById('groups-list-container');
+            if (!container) return;
+
+            if (!groups || groups.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-400 text-center py-6">No se encontraron grupos en tu cuenta.</p>`;
+                return;
+            }
+
+            container.innerHTML = groups.map(g => {
+                const isSelected = g.id === currentGroupId;
+                const cardClass = isSelected
+                    ? "group-item-card cursor-pointer flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-xl transition-all duration-150"
+                    : "group-item-card cursor-pointer flex items-center justify-between p-3 bg-slate-50/60 hover:bg-slate-50 border border-slate-100 rounded-xl transition-all duration-150";
+
+                return `
+                    <div class="${cardClass}" data-id="${g.id}" onclick="selectGroup('${g.id}', '${g.name}')">
+                        <div class="flex flex-col space-y-1">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-[#D32F2F]"></span>
+                                <span class="text-xs font-bold text-slate-700">${g.name}</span>
+                            </div>
+                            <div class="flex items-center pl-[18px]">
+                                <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Con licencia (${g.licensed_count || 0})</span>
+                            </div>
+                        </div>
+                        <span class="text-[9px] font-mono font-bold text-slate-400 bg-slate-200/50 px-2 py-0.5 rounded-md">ID: ${g.id.slice(0, 8)}...</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Renderizar la tabla de usuarios (Permite CLICKEAR al usuario para EDITAR)
+        function renderTable(users) {
+            const tbody = document.getElementById('users-table-body');
+            
+            let displayUsers = [...users];
+            if (showOnlyLicensed) {
+                displayUsers = displayUsers.filter(u => u.type === 2 && !u.not_in_zoom);
+            }
+            
+            if (!displayUsers || displayUsers.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="px-6 py-12 text-center text-sm text-slate-400 font-medium">
+                            No se encontraron usuarios ${showOnlyLicensed ? 'con licencia (Zoom Meetings) ' : ''}en la selección.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = displayUsers.map(user => {
+                const name = `${user.first_name || ''} ${user.last_name || ''}`.trim() || (user.email ? user.email.split('@')[0] : 'Sin Nombre');
+                const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
+                
+                // Tipo de Licencia Badge
+                let licenseBadge = '';
+                if (user.not_in_zoom) {
+                    licenseBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 border border-amber-100">Sin cuenta Zoom</span>`;
+                } else if (user.type === 2) {
+                    licenseBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-[#2D8CFF] border border-blue-100">Zoom Meetings</span>`;
+                } else {
+                    licenseBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">Basic</span>`;
+                }
+
+                // Grupo Badge: Muestra dinámicamente sus grupos reales de Zoom
+                let groupBadge = '';
+                if (user.not_in_zoom) {
+                    groupBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-50 text-slate-400 border border-slate-100">No aplica</span>`;
+                } else if (currentGroupName) {
+                    groupBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-[#D32F2F] border border-red-100">${currentGroupName}</span>`;
+                } else if (user.groups && user.groups.length > 0) {
+                    groupBadge = user.groups.map(gname => `
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-[#D32F2F] border border-red-100 mr-1 mb-1 shadow-sm">${gname}</span>
+                    `).join('');
+                } else {
+                    groupBadge = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-400 border border-slate-200">Sin grupo</span>`;
+                }
+
+                // Badge de Estado Pendiente
+                let statusBadge = '';
+                if (user.status === 'pending') {
+                    const dateStr = user.creation_date ? ` (${user.creation_date})` : '';
+                    statusBadge = `&nbsp;<span class="inline-flex items-center ml-2 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">Pendiente${dateStr}</span>`;
+                }
+
+                // tr tiene onclick para cargar datos en el formulario
+                return `
+                    <tr onclick="openEditUserModal('${user.email}')" class="hover:bg-slate-50/70 cursor-pointer transition-colors duration-150 group">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-9 w-9 rounded-xl bg-gradient-to-tr from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">
+                                    ${initials}
+                                </div>
+                                <div class="ml-3">
+                                    <div class="text-sm font-semibold text-slate-800 group-hover:text-[#2D8CFF] transition-colors duration-150">${name}${statusBadge}</div>
+                                    <div class="text-[10px] text-slate-400 font-medium sm:hidden">${user.email}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium group-hover:text-[#2D8CFF] transition-colors duration-150">
+                            ${user.email}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            ${licenseBadge}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap flex flex-wrap items-center justify-start max-w-[200px]">
+                            ${groupBadge}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Actualizar estadísticas
+        function updateStats(users, globalTotal, totalPending = globalPendingCount) {
+            const licensed = users.filter(u => u.type === 2).length;
+
+            document.getElementById('stat-total').innerText = globalTotal.toLocaleString();
+            document.getElementById('stat-licensed').innerText = licensed;
+            document.getElementById('stat-pending').innerText = totalPending.toLocaleString();
+
+            const licensedLabel = document.getElementById('stat-licensed-label');
+            const pendingLabel = document.getElementById('stat-pending-label');
+            
+            if (currentGroupId) {
+                licensedLabel.innerText = "Licenciados (En Grupo)";
+                pendingLabel.innerText = "Pendientes (En Grupo)";
+            } else {
+                licensedLabel.innerText = "Licenciados (Pág. Actual)";
+                pendingLabel.innerText = "Pendientes (Total Zoom)";
+            }
+        }
+
+        // Obtener uso y disponibilidad de licencias
+        async function fetchLicenses() {
+            const statLicenses = document.getElementById('stat-licenses');
+            const statLicensesDetail = document.getElementById('stat-licenses-detail');
+            const iconContainer = document.getElementById('stat-licenses-icon-container');
+
+            try {
+                const response = await fetch('/api/licenses');
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    globalLicensedCount = data.used_licenses || 0;
+                    if (statLicenses) statLicenses.innerText = data.total_licenses;
+                    if (statLicensesDetail) {
+                        statLicensesDetail.innerText = `Usadas: ${data.used_licenses} | Libres: ${data.available_licenses}`;
+                        statLicensesDetail.className = "text-[10px] text-slate-500 font-semibold mt-1";
+                        statLicensesDetail.removeAttribute('title');
+                    }
+                    if (iconContainer) {
+                        iconContainer.className = "p-3.5 bg-emerald-50 rounded-xl text-emerald-600";
+                        iconContainer.removeAttribute('title');
+                    }
+                    
+                    // Actualizar etiquetas de complementos dinámicamente
+                    const largeMeetingLabel = document.getElementById('large-meeting-label');
+                    if (largeMeetingLabel && data.large_meeting) {
+                        largeMeetingLabel.innerText = `(${data.large_meeting.available} disponible de ${data.large_meeting.total})`;
+                    }
+                    
+                    const zoomPhoneLabel = document.getElementById('zoom-phone-label');
+                    if (zoomPhoneLabel && data.zoom_phone) {
+                        if (data.zoom_phone.total > 0) {
+                            zoomPhoneLabel.innerText = `(${data.zoom_phone.available} disponible de ${data.zoom_phone.total})`;
+                        } else {
+                            zoomPhoneLabel.innerText = "(No habilitado)";
+                        }
+                    }
+                    
+                    const webinarsLabel = document.getElementById('webinars-label');
+                    if (webinarsLabel && data.webinar) {
+                        webinarsLabel.innerText = `(${data.webinar.available} disponible de ${data.webinar.total})`;
+                    }
+                } else {
+                    const errorMsg = data.detail || 'Falta scope billing:read:admin';
+                    if (statLicenses) statLicenses.innerText = "N/A";
+                    if (statLicensesDetail) {
+                        statLicensesDetail.innerText = "Verifique permisos";
+                        statLicensesDetail.className = "text-[10px] text-red-500 font-semibold mt-1 cursor-help";
+                        statLicensesDetail.title = errorMsg;
+                    }
+                    if (iconContainer) {
+                        iconContainer.className = "p-3.5 bg-red-50 rounded-xl text-red-500 cursor-help";
+                        iconContainer.title = errorMsg;
+                    }
+                }
+            } catch (error) {
+                console.error("Error al obtener licencias:", error);
+                if (statLicenses) statLicenses.innerText = "Error";
+                if (statLicensesDetail) {
+                    statLicensesDetail.innerText = "Error de conexión";
+                    statLicensesDetail.className = "text-[10px] text-slate-400 font-semibold mt-1";
+                }
+            }
+        }
+
+        // Manejar el envío del formulario
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+
+            const emailInput = document.getElementById('email');
+            const firstNameInput = document.getElementById('firstName');
+            const lastNameInput = document.getElementById('lastName');
+            const workplaceSelect = document.getElementById('workplace-select');
+            const groupSelect = document.getElementById('group-select');
+            
+            const btnSubmit = document.getElementById('btn-submit');
+            const btnText = document.getElementById('btn-submit-text');
+            const btnSpinner = document.getElementById('btn-submit-spinner');
+
+            const email = emailInput.value.trim();
+            const first_name = firstNameInput.value.trim();
+            const last_name = lastNameInput.value.trim();
+            const group_id = groupSelect.value;
+            const user_type = parseInt(workplaceSelect.value); // Envia 1 (Basic) o 2 (Licensed)
+
+            if (!email) {
+                showToast('El correo electrónico es requerido', 'error');
+                return;
+            }
+
+            btnSubmit.disabled = true;
+            btnText.innerText = "Procesando...";
+            btnSpinner.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, first_name, last_name, group_id, user_type })
+                });
+                
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    showToast(data.message, 'success');
+                    cancelEdit();
+                    closeUserFormModal();
+                    
+                    if (isSearching) {
+                        handleSearch();
+                    } else {
+                        fetchUsers();
+                    }
+                    fetchLicenses();
+                    fetchGroups();
+                } else {
+                    showToast(data.detail || 'Ocurrió un error al procesar la solicitud', 'error');
+                }
+            } catch (error) {
+                showToast('Error de red al procesar el usuario', 'error');
+            } finally {
+                btnSubmit.disabled = false;
+                btnSpinner.classList.add('hidden');
+                // Si estaba en modo edición, restablecer el texto adecuado
+                const isEditing = document.getElementById('form-title').innerText.includes('Editar');
+                btnText.innerText = isEditing ? "Guardar Cambios" : "Asignar Licencia y Grupo";
+            }
+        }
+
+        // Mostrar Toast flotante
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            toast.className = `toast-animate flex items-start space-x-3 p-4 rounded-xl shadow-xl border text-white ${
+                type === 'success' 
+                ? 'bg-emerald-600 border-emerald-700' 
+                : 'bg-red-600 border-red-700'
+            }`;
+
+            const icon = type === 'success' 
+                ? `<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`
+                : `<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+
+            toast.innerHTML = `
+                ${icon}
+                <div class="flex-grow">
+                    <p class="text-xs font-semibold leading-tight">${message}</p>
+                </div>
+                <button onclick="this.parentElement.remove()" class="text-white/75 hover:text-white focus:outline-none">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'scale-95');
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 7000);
+        }
+
+        async function checkSession() {
+            try {
+                const response = await fetch('/api/me');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.email) {
+                        currentUser = data;
+                        currentUserRole = data.role || 'user';
+                        
+                        const profileHeader = document.getElementById('user-profile-header');
+                        const initials = document.getElementById('user-initials');
+                        const displayName = document.getElementById('user-display-name');
+                        const displayEmail = document.getElementById('user-display-email');
+                        
+                        if (profileHeader) profileHeader.classList.remove('hidden');
+                        if (displayName) displayName.innerText = `${data.first_name} ${data.last_name}`.trim() || 'Usuario';
+                        if (displayEmail) displayEmail.innerText = data.email;
+                        
+                        if (initials) {
+                            const name = `${data.first_name} ${data.last_name}`.trim();
+                            initials.innerText = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'U';
+                        }
+                        return data;
+                    }
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error("Error al verificar la sesión:", error);
+                window.location.href = '/login';
+            }
+            return null;
+        }
+
+        async function handleLogout() {
+            try {
+                const response = await fetch('/api/logout', { method: 'POST' });
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    showToast('No se pudo cerrar la sesión.', 'error');
+                }
+            } catch (error) {
+                showToast('Error de red al cerrar sesión.', 'error');
+            }
+        }
+
+        // --- SISTEMA DE LOGS Y PESTAÑAS ---
+        let allLogs = [];
+
+        async function fetchLogs() {
+            const logsRefreshIcon = document.getElementById('logs-refresh-icon');
+            logsRefreshIcon?.classList.add('animate-spin');
+            
+            try {
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'success') {
+                    allLogs = data.logs;
+                    renderLogsTable(allLogs);
+                } else {
+                    showToast(data.detail || 'Error al obtener el historial de logs', 'error');
+                }
+            } catch (error) {
+                showToast('Error de red al cargar el historial de logs', 'error');
+            } finally {
+                logsRefreshIcon?.classList.remove('animate-spin');
+            }
+        }
+
+        function renderLogsTable(logs) {
+            const tbody = document.getElementById('logs-table-body');
+            if (!tbody) return;
+
+            if (!logs || logs.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-sm text-slate-400 font-medium">
+                            No hay movimientos registrados en el historial.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = logs.map(log => {
+                let badgeClass = '';
+                if (log.action_type === 'CREAR') {
+                    badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-100';
+                } else if (log.action_type === 'ACTUALIZAR') {
+                    badgeClass = 'bg-blue-50 text-blue-700 border-blue-100';
+                } else {
+                    badgeClass = 'bg-slate-100 text-slate-700 border-slate-200';
+                }
+
+                return `
+                    <tr class="hover:bg-slate-50/50 transition-colors duration-150">
+                        <td class="px-6 py-4 whitespace-nowrap text-xs font-semibold text-slate-500">
+                            ${log.date || ''}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-xs font-semibold text-slate-700 truncate" title="${log.operator_email || ''}">
+                            ${log.operator_email || ''}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}">
+                                ${log.action_type || ''}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-xs font-semibold text-slate-700 truncate" title="${log.target_email || ''}">
+                            ${log.target_email || ''}
+                        </td>
+                        <td class="px-6 py-4 text-xs font-medium text-slate-600 break-words">
+                            ${log.details || ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterLogsTable() {
+            const query = document.getElementById('logs-search-input').value.toLowerCase().trim();
+            if (!query) {
+                renderLogsTable(allLogs);
+                return;
+            }
+
+            const filtered = allLogs.filter(log => {
+                const operator = (log.operator_email || '').toLowerCase();
+                const target = (log.target_email || '').toLowerCase();
+                const details = (log.details || '').toLowerCase();
+                const action = (log.action_type || '').toLowerCase();
+                const date = (log.date || '').toLowerCase();
+                return operator.includes(query) || target.includes(query) || details.includes(query) || action.includes(query) || date.includes(query);
+            });
+
+            renderLogsTable(filtered);
+        }
+
+        function switchTab(view) {
+            const tabDashboard = document.getElementById('tab-dashboard');
+            const tabLogs = document.getElementById('tab-logs');
+            const tabAi = document.getElementById('tab-ai');
+            
+            const dashboardView = document.getElementById('dashboard-view');
+            const logsView = document.getElementById('logs-view');
+            const aiView = document.getElementById('ai-view');
+
+            if (!tabDashboard || !tabLogs || !dashboardView || !logsView) return;
+
+            const inactiveClass = "px-5 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 focus:outline-none transition-all duration-150 flex items-center space-x-2";
+            const activeClass = "px-5 py-3 text-sm font-semibold border-b-2 border-[#2D8CFF] text-[#2D8CFF] focus:outline-none transition-all duration-150 flex items-center space-x-2";
+
+            tabDashboard.className = inactiveClass;
+            tabLogs.className = inactiveClass;
+            if (tabAi) tabAi.className = inactiveClass;
+
+            dashboardView.classList.add('hidden');
+            logsView.classList.add('hidden');
+            if (aiView) aiView.classList.add('hidden');
+
+            if (view === 'dashboard') {
+                tabDashboard.className = activeClass;
+                dashboardView.classList.remove('hidden');
+            } else if (view === 'logs') {
+                tabLogs.className = activeClass;
+                logsView.classList.remove('hidden');
+                fetchLogs();
+            } else if (view === 'ai') {
+                if (tabAi) tabAi.className = activeClass;
+                if (aiView) aiView.classList.remove('hidden');
+                checkAIHealth();
+                loadAIChatHistory();
+            }
+        }
+
+        // --- Módulo de Inteligencia Artificial Widget Flotante ---
+        let isAIPopupOpen = false;
+        let isAIMaximized = false;
+
+        function toggleAIPopup() {
+            const popup = document.getElementById('ai-floating-popup');
+            if (!popup) return;
+
+            isAIPopupOpen = !isAIPopupOpen;
+            if (isAIPopupOpen) {
+                popup.classList.remove('hidden');
+                checkAIHealth();
+                loadAIChatHistory();
+                setTimeout(() => {
+                    const input = document.getElementById('ai-input-message');
+                    if (input) input.focus();
+                }, 100);
+            } else {
+                popup.classList.add('hidden');
+            }
+        }
+
+        function toggleAIMaximize() {
+            const popup = document.getElementById('ai-floating-popup');
+            if (!popup) return;
+
+            isAIMaximized = !isAIMaximized;
+            if (isAIMaximized) {
+                popup.classList.remove('w-[92vw]', 'sm:w-[460px]', 'md:w-[500px]', 'h-[640px]');
+                popup.classList.add('w-[95vw]', 'md:w-[850px]', 'h-[85vh]');
+            } else {
+                popup.classList.remove('w-[95vw]', 'md:w-[850px]', 'h-[85vh]');
+                popup.classList.add('w-[92vw]', 'sm:w-[460px]', 'md:w-[500px]', 'h-[640px]');
+            }
+        }
+
+        function triggerLiveBackgroundRefresh() {
+            try {
+                fetchUsers();
+                fetchLicenses();
+                fetchGroups();
+            } catch (e) {}
+        }
+
+        async function checkAIHealth() {
+            const badge = document.getElementById('ai-health-badge');
+            const text = document.getElementById('ai-health-text');
+            const ping = document.getElementById('ai-trigger-ping');
+            try {
+                const res = await fetch('/api/ai/health');
+                const data = await res.json();
+                if (data.status === 'success' && data.health.status === 'online') {
+                    if (badge) badge.className = "px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+                    if (text) text.innerText = `Activa (${data.health.selected_model})`;
+                    if (ping) ping.classList.remove('hidden');
+                } else {
+                    if (badge) badge.className = "px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30";
+                    if (text) text.innerText = `Diagnóstico Local`;
+                }
+            } catch (e) {
+                if (badge) badge.className = "px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-slate-500/20 text-slate-300 border border-slate-500/30";
+                if (text) text.innerText = "Modo Local";
+            }
+        }
+
+        async function loadAIChatHistory() {
+            try {
+                const res = await fetch('/api/ai/history');
+                const data = await res.json();
+                if (data.status === 'success' && data.history && data.history.length > 0) {
+                    const container = document.getElementById('ai-chat-messages');
+                    if (!container) return;
+                    
+                    const welcomeMsg = container.children[0]?.outerHTML || '';
+                    container.innerHTML = welcomeMsg;
+
+                    data.history.forEach(item => {
+                        appendAIMessageBubble(item.role, item.content, item.metadata);
+                    });
+                    container.scrollTop = container.scrollHeight;
+                }
+            } catch (e) {
+                console.error("Error al cargar historial IA:", e);
+            }
+        }
+
+        function appendAIMessageBubble(role, content, metadata = null) {
+            const container = document.getElementById('ai-chat-messages');
+            if (!container) return;
+
+            const div = document.createElement('div');
+            div.className = "flex items-start space-x-2.5 animate-fade-in";
+
+            if (role === 'user') {
+                div.innerHTML = `
+                    <div class="flex-grow"></div>
+                    <div class="bg-gradient-to-r from-[#2D8CFF] to-[#1A73E8] text-white p-3 rounded-2xl shadow-sm max-w-[85%] text-xs leading-relaxed font-medium">
+                        ${escapeHtml(content)}
+                    </div>
+                    <div class="flex-shrink-0 w-7 h-7 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs">
+                        👤
+                    </div>
+                `;
+            } else {
+                let badgeHtml = '';
+                if (metadata && metadata.tools_executed && metadata.tools_executed.length > 0) {
+                    badgeHtml = `<div class="mb-1.5 flex items-center space-x-1 text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-md inline-block">
+                        <span>🛠️ Ejecutó: ${metadata.tools_executed.join(', ')}</span>
+                    </div>`;
+                }
+
+                let formattedContent = formatMarkdown(content);
+
+                div.innerHTML = `
+                    <div class="flex-shrink-0 w-7 h-7 rounded-lg bg-[#2D8CFF] text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                        🤖
+                    </div>
+                    <div class="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm max-w-[85%] text-xs space-y-1.5 leading-relaxed text-slate-700">
+                        ${badgeHtml}
+                        <div>${formattedContent}</div>
+                    </div>
+                `;
+            }
+
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function appendAIConfirmationCard(actionId, message, toolName) {
+            const container = document.getElementById('ai-chat-messages');
+            if (!container) return;
+
+            const div = document.createElement('div');
+            div.className = "flex items-start space-x-2.5 animate-fade-in";
+            div.id = `conf-card-${actionId}`;
+
+            div.innerHTML = `
+                <div class="flex-shrink-0 w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                    ⚠️
+                </div>
+                <div class="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 shadow-sm max-w-[85%] text-xs space-y-2 text-amber-900">
+                    <div class="font-bold text-amber-800 flex items-center space-x-1">
+                        <span>Confirmación HITL Requerida</span>
+                    </div>
+                    <p class="leading-relaxed font-medium">${escapeHtml(message.replace('⚠️ **Confirmación requerida**\n\n', ''))}</p>
+                    <div class="flex space-x-2 pt-1" id="conf-btns-${actionId}">
+                        <button onclick="confirmAIAction('${actionId}', true)" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs transition-all shadow-sm">
+                            Confirmar y Ejecutar
+                        </button>
+                        <button onclick="confirmAIAction('${actionId}', false)" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs transition-all">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendAIMessage() {
+            const input = document.getElementById('ai-input-message');
+            const btn = document.getElementById('btn-send-ai');
+            if (!input) return;
+
+            const message = input.value.trim();
+            if (!message) return;
+
+            input.value = '';
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+
+            if (!isAIPopupOpen) toggleAIPopup();
+
+            appendAIMessageBubble('user', message);
+
+            const container = document.getElementById('ai-chat-messages');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'ai-typing-indicator';
+            loadingDiv.className = 'flex items-start space-x-2.5 animate-pulse';
+            loadingDiv.innerHTML = `
+                <div class="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">🤖</div>
+                <div class="bg-white p-3 rounded-2xl border border-slate-100 text-xs text-slate-400 font-medium italic">
+                    Procesando consulta y analizando datos del sistema...
+                </div>
+            `;
+            container.appendChild(loadingDiv);
+            container.scrollTop = container.scrollHeight;
+
+            try {
+                const res = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+
+                document.getElementById('ai-typing-indicator')?.remove();
+                const data = await res.json();
+
+                if (data.status === 'confirmation_required') {
+                    appendAIConfirmationCard(data.action_id, data.confirmation_message || data.message, data.tool_name);
+                } else if (data.status === 'success') {
+                    appendAIMessageBubble('assistant', data.message, { tools_executed: data.tools_executed?.map(t => t.name) });
+                    triggerLiveBackgroundRefresh();
+                } else {
+                    appendAIMessageBubble('assistant', data.message || 'Ocurrió un inconveniente al procesar la solicitud.');
+                }
+            } catch (error) {
+                document.getElementById('ai-typing-indicator')?.remove();
+                appendAIMessageBubble('assistant', 'Error de conexión con el servicio de IA local.');
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+            }
+        }
+
+        async function confirmAIAction(actionId, confirmed) {
+            const btns = document.getElementById(`conf-btns-${actionId}`);
+            if (btns) {
+                btns.innerHTML = `<span class="text-xs font-bold text-slate-500 italic">Procesando confirmación...</span>`;
+            }
+
+            try {
+                const res = await fetch('/api/ai/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action_id: actionId, confirmed: confirmed })
+                });
+                const data = await res.json();
+                
+                const card = document.getElementById(`conf-card-${actionId}`);
+                if (card) card.remove();
+
+                if (data.status === 'success' || data.status === 'cancelled') {
+                    appendAIMessageBubble('assistant', data.message);
+                    triggerLiveBackgroundRefresh();
+                } else {
+                    showToast(data.message || 'Error al ejecutar acción', 'error');
+                }
+            } catch (e) {
+                showToast('Error de conexión al confirmar acción', 'error');
+            }
+        }
+
+        function sendQuickPrompt(promptText) {
+            const input = document.getElementById('ai-input-message');
+            if (input) {
+                input.value = promptText;
+                sendAIMessage();
+            }
+        }
+
+        async function clearAIChat() {
+            try {
+                await fetch('/api/ai/history', { method: 'DELETE' });
+                const container = document.getElementById('ai-chat-messages');
+                if (container) {
+                    container.innerHTML = `
+                        <div class="flex items-start space-x-2.5">
+                            <div class="flex-shrink-0 w-7 h-7 rounded-lg bg-[#2D8CFF] text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                                🤖
+                            </div>
+                            <div class="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm max-w-[85%] space-y-1.5 leading-relaxed">
+                                <p class="font-bold text-slate-800">¡Historial limpiado correctamente!</p>
+                                <p class="text-slate-600">¿En qué puedo ayudarte ahora?</p>
+                            </div>
+                        </div>
+                    `;
+                }
+                showToast('Historial del chat de IA limpiado', 'success');
+            } catch (e) {
+                showToast('Error al limpiar el historial', 'error');
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        function formatMarkdown(text) {
+            if (!text) return '';
+            let formatted = escapeHtml(text);
+            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
+            formatted = formatted.replace(/`(.*?)`/g, '<code class="px-1.5 py-0.5 bg-slate-100 rounded text-blue-700 font-mono text-[11px]">$1</code>');
+            formatted = formatted.replace(/\n/g, '<br>');
+            return formatted;
+        }
+
+        // Descargar usuarios visibles en la tabla a un archivo CSV/Excel ordenado
+        async function downloadExcel() {
+            const countLabel = document.getElementById('user-count-label');
+            const originalText = countLabel ? countLabel.innerText : '';
+            const originalClass = countLabel ? countLabel.className : '';
+            
+            if (countLabel) {
+                countLabel.innerText = "Generando descarga completa...";
+                countLabel.className = "text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-lg animate-pulse";
+            }
+            
+            try {
+                let url = '/api/users/export';
+                const params = [];
+                if (currentGroupId) {
+                    params.push(`group_id=${currentGroupId}`);
+                }
+                const query = document.getElementById('search-input').value.trim();
+                if (isSearching && query) {
+                    params.push(`q=${encodeURIComponent(query)}`);
+                }
+                if (params.length > 0) {
+                    url += '?' + params.join('&');
+                }
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Error al descargar el archivo Excel');
+                }
+                
+                const blob = await response.blob();
+                const downloadUrl = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", downloadUrl);
+                
+                let filename = "usuarios_zoom.csv";
+                if (currentGroupName) {
+                    filename = `usuarios_grupo_${currentGroupName.toLowerCase().replace(/\s+/g, '_')}.csv`;
+                } else if (isSearching && query) {
+                    filename = `usuarios_busqueda_${query.toLowerCase().replace(/\s+/g, '_')}.csv`;
+                }
+                
+                link.setAttribute("download", filename);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                showToast('Archivo Excel descargado correctamente', 'success');
+            } catch (error) {
+                console.error(error);
+                showToast('Error al descargar el archivo Excel', 'error');
+            } finally {
+                if (countLabel) {
+                    countLabel.innerText = originalText;
+                    countLabel.className = originalClass;
+                }
+            }
+        }
+
+        // Alternar filtro para mostrar solo usuarios con licencia (Zoom Meetings)
+        function toggleLicenseFilter() {
+            showOnlyLicensed = !showOnlyLicensed;
+            const th = document.getElementById('th-licencia');
+            const icon = document.getElementById('license-filter-icon');
+            
+            if (showOnlyLicensed) {
+                th.classList.remove('text-slate-400');
+                th.classList.add('text-[#2D8CFF]');
+                icon.classList.remove('text-slate-300');
+                icon.classList.add('text-[#2D8CFF]');
+                showToast('Filtrando: Solo usuarios con licencia (Zoom Meetings)', 'success');
+            } else {
+                th.classList.remove('text-[#2D8CFF]');
+                th.classList.add('text-slate-400');
+                icon.classList.remove('text-[#2D8CFF]');
+                icon.classList.add('text-slate-300');
+                showToast('Mostrando todos los usuarios', 'success');
+            }
+            
+            // Reset de paginación para iniciar desde la página 1 con el nuevo filtro
+            currentPageToken = '';
+            tokenHistory = [];
+
+            const query = document.getElementById('search-input').value.trim();
+            if (query && !isSearching) {
+                // Si es búsqueda local activa, filtramos localmente
+                filterLocalTable(query);
+            } else if (isSearching) {
+                // Si es búsqueda de backend activa, re-renderizamos la tabla de búsqueda
+                renderTable(allUsers);
+            } else {
+                // Si no hay búsqueda, recargamos la página desde la API de Zoom con el nuevo filtro (trayendo 50 exactos)
+                fetchUsers();
+            }
+        }
+
+        // --- Operaciones de Quitar Licencia Masiva ---
+        function confirmRemoveLicensesMass() {
+            if (!currentGroupId) {
+                showToast("Por favor, selecciona un grupo primero", "error");
+                return;
+            }
+            const modal = document.getElementById('mass-remove-modal');
+            const content = document.getElementById('mass-remove-modal-content');
+            const groupLabel = document.getElementById('mass-remove-group-name');
+            
+            if (groupLabel) groupLabel.innerText = currentGroupName || "este grupo";
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeMassRemoveModal() {
+            const modal = document.getElementById('mass-remove-modal');
+            const content = document.getElementById('mass-remove-modal-content');
+            
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.remove('flex');
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        async function executeRemoveLicensesMass() {
+            const spinner = document.getElementById('mass-remove-spinner');
+            const btn = document.getElementById('btn-confirm-mass-remove');
+            
+            if (spinner) spinner.classList.remove('hidden');
+            if (btn) btn.disabled = true;
+            
+            try {
+                const response = await fetch(`/api/groups/${currentGroupId}/remove-licenses-mass`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'success') {
+                    showToast(data.message || 'Licencias removidas correctamente', 'success');
+                    closeMassRemoveModal();
+                    
+                    // Resetear la paginación y recargar datos
+                    currentPageToken = '';
+                    tokenHistory = [];
+                    fetchUsers();
+                    fetchLicenses();
+                    fetchGroups(); // Actualiza la cantidad de licencias en la lista de grupos
+                } else {
+                    showToast(data.detail || 'Error al remover licencias masivamente', 'error');
+                }
+            } catch (error) {
+                console.error(error);
+                showToast('Error de conexión con el servidor', 'error');
+            } finally {
+                if (spinner) spinner.classList.add('hidden');
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // --- Operaciones de Importar CSV ---
+        function triggerCsvImport() {
+            document.getElementById('csv-file-input').click();
+        }
+
+        async function handleCsvFileSelected(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            // Validar extensión
+            if (!file.name.endsWith('.csv')) {
+                showToast("Por favor, selecciona un archivo con extensión .csv", "error");
+                event.target.value = '';
+                return;
+            }
+            
+            showToast("Subiendo e importando archivo...", "info");
+            
+            const formData = new FormData();
+            formData.append("file", file);
+            if (currentGroupId) {
+                formData.append("group_id", currentGroupId);
+            }
+            
+            try {
+                let url = '/api/users/import-csv';
+                if (currentGroupId) {
+                    url += `?group_id=${currentGroupId}`;
+                }
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'success') {
+                    // Mostrar resultados en el modal
+                    document.getElementById('csv-result-success').innerText = data.imported_count || 0;
+                    document.getElementById('csv-result-failed').innerText = data.failed_count || 0;
+                    
+                    const errSec = document.getElementById('csv-error-section');
+                    const errList = document.getElementById('csv-error-list');
+                    
+                    if (data.failed_count > 0 && data.errors && data.errors.length > 0) {
+                        errList.innerHTML = data.errors.map(err => `<div>• ${err}</div>`).join('');
+                        errSec.classList.remove('hidden');
+                    } else {
+                        errSec.classList.add('hidden');
+                    }
+                    
+                    openCsvResultModal();
+                    
+                    // Recargar datos
+                    currentPageToken = '';
+                    tokenHistory = [];
+                    fetchUsers();
+                    fetchLicenses();
+                    fetchGroups();
+                } else {
+                    showToast(data.detail || 'Error al importar el archivo CSV', 'error');
+                }
+            } catch (error) {
+                console.error(error);
+                showToast('Error de conexión al importar CSV', 'error');
+            } finally {
+                event.target.value = ''; // Reset input
+            }
+        }
+
+        function openCsvResultModal() {
+            const modal = document.getElementById('csv-result-modal');
+            const content = document.getElementById('csv-result-modal-content');
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeCsvResultModal() {
+            const modal = document.getElementById('csv-result-modal');
+            const content = document.getElementById('csv-result-modal-content');
+            
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.remove('flex');
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+    </script>
+
+    <!-- Modal de Confirmación para Quitar Licencias Masivas -->
+    <div id="mass-remove-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 transform transition-all duration-300 scale-95 opacity-0" id="mass-remove-modal-content">
+            <div class="flex items-center space-x-3 text-red-600 mb-4">
+                <span class="p-2 bg-red-50 rounded-lg">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </span>
+                <h3 class="text-base font-extrabold text-slate-800">Quitar Licencias Masivamente</h3>
+            </div>
+            
+            <p class="text-xs text-slate-500 font-semibold mb-6 leading-relaxed">
+                ¿Estás seguro de que deseas quitar las licencias de Zoom Workplace a todos los usuarios del grupo <strong id="mass-remove-group-name" class="text-slate-700"></strong>?<br><br>
+                Esta acción cambiará el tipo de cuenta de todos los miembros con licencia en este grupo a tipo <strong class="text-red-600">Basic (sin licencia)</strong> en Zoom de forma inmediata.
+            </p>
+            
+            <div class="flex space-x-3 justify-end">
+                <button onclick="closeMassRemoveModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition-all duration-200">
+                    Cancelar
+                </button>
+                <button onclick="executeRemoveLicensesMass()" id="btn-confirm-mass-remove" class="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-all duration-200 flex items-center space-x-1.5">
+                    <span>Sí, quitar licencias</span>
+                    <svg id="mass-remove-spinner" class="animate-spin h-3.5 w-3.5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Resultados de Importación CSV -->
+    <div id="csv-result-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 transform transition-all duration-300 scale-95 opacity-0 max-h-[85vh] flex flex-col" id="csv-result-modal-content">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <div class="flex items-center space-x-3">
+                    <span id="csv-result-icon-container" class="p-2 rounded-lg text-emerald-600 bg-emerald-50">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </span>
+                    <h3 class="text-base font-extrabold text-slate-800">Resultado de Importación CSV</h3>
+                </div>
+                <button onclick="closeCsvResultModal()" class="text-slate-400 hover:text-slate-600 focus:outline-none">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div class="space-y-4 flex-grow overflow-y-auto pr-1">
+                <!-- Stats Summary Cards -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="p-4 bg-emerald-50 border border-emerald-100 rounded-xl text-center">
+                         <span class="block text-xs font-bold text-emerald-700 uppercase tracking-wider">Éxito</span>
+                         <span id="csv-result-success" class="block text-3xl font-extrabold text-emerald-600 mt-1">0</span>
+                    </div>
+                    <div class="p-4 bg-rose-50 border border-rose-100 rounded-xl text-center">
+                         <span class="block text-xs font-bold text-rose-700 uppercase tracking-wider">Fallidos</span>
+                         <span id="csv-result-failed" class="block text-3xl font-extrabold text-rose-600 mt-1">0</span>
+                    </div>
+                </div>
+                
+                <!-- Error List Section -->
+                <div id="csv-error-section" class="hidden">
+                     <h4 class="text-xs font-extrabold text-slate-600 uppercase tracking-wider mb-2">Detalles de Errores:</h4>
+                     <div id="csv-error-list" class="bg-rose-50/50 border border-rose-100 rounded-xl p-3 text-xs text-rose-700 font-semibold space-y-1.5 max-h-[200px] overflow-y-auto font-mono">
+                     </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end pt-4 border-t border-slate-100 mt-4">
+                 <button onclick="closeCsvResultModal()" class="px-5 py-2.5 bg-[#2D8CFF] hover:bg-[#1A56DB] text-white font-bold rounded-xl text-xs transition-all duration-200">
+                     Entendido
+                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Formulario de Usuario (Agregar / Editar) -->
+    <div id="user-form-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 transform transition-all duration-300 scale-95 opacity-0 max-h-[90vh] flex flex-col" id="user-form-modal-content">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <div class="flex items-center space-x-3">
+                    <span class="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+                    </span>
+                    <h3 id="form-title" class="text-base font-extrabold text-slate-800">Agregar y Licenciar Usuario</h3>
+                </div>
+                <button onclick="closeUserFormModal()" class="text-slate-400 hover:text-slate-600 focus:outline-none">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <form id="license-form" class="space-y-4 flex-grow overflow-y-auto pr-1">
+                <!-- Email Input -->
+                <div>
+                    <label for="email" class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Correo Electrónico *</label>
+                    <input type="email" id="email" required placeholder="correo@usmp.pe" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] rounded-xl outline-none text-sm transition-all duration-200">
+                </div>
+
+                <!-- First Name & Last Name Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="firstName" class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nombres</label>
+                        <input type="text" id="firstName" placeholder="Nombres completos" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] rounded-xl outline-none text-sm transition-all duration-200">
+                    </div>
+                    <div>
+                        <label for="lastName" class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Apellidos</label>
+                        <input type="text" id="lastName" placeholder="Apellidos completos" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] rounded-xl outline-none text-sm transition-all duration-200">
+                    </div>
+                </div>
+
+                <!-- Zoom Workplace Selector -->
+                <div>
+                    <label for="workplace-select" class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Licencia de Zoom Workplace *</label>
+                    <select id="workplace-select" onchange="handleWorkplaceChange()" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] rounded-xl outline-none text-sm transition-all duration-200">
+                        <option value="2" selected>Zoom Meetings (Licensed)</option>
+                        <option value="1">Sin asignar (Basic)</option>
+                    </select>
+                </div>
+
+                <!-- Collapsible Zoom License Panel -->
+                <div id="zoom-meetings-license-container">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Asignar licencia zoom *</label>
+                    
+                    <!-- Toggle Box -->
+                    <div onclick="toggleAddons()" class="cursor-pointer p-3 bg-blue-50 hover:bg-blue-100/50 border border-blue-200 hover:border-blue-300 rounded-xl flex items-center justify-between mb-3 shadow-sm transition-all duration-200 select-none">
+                        <div class="flex items-center space-x-2.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#2D8CFF]"></span>
+                            <span class="text-xs font-bold text-blue-900">Zoom Meetings (Licensed)</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[9px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md font-extrabold uppercase">Activo</span>
+                            <svg id="chevron-icon" class="w-4 h-4 text-blue-600 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Collapsible Licenses & Add-ons Sub-Panel (Hidden by default) -->
+                    <div id="license-addons-panel" class="hidden border border-slate-200 rounded-xl bg-slate-50/50 p-4 space-y-3.5 mb-3 transition-all duration-200">
+                        <div class="text-xs font-extrabold text-slate-600 border-b border-slate-200 pb-2">
+                            Licencias y complementos
+                        </div>
+                        
+                        <!-- Large Meeting -->
+                        <div class="flex items-start justify-between text-xs">
+                            <div class="flex items-start space-x-2">
+                                <input type="checkbox" id="addon-large-meeting" class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                                <div class="flex flex-col">
+                                    <span class="font-semibold text-slate-700">Reunión grande (500 participantes)</span>
+                                    <span id="large-meeting-label" class="text-[10px] text-slate-400 font-medium">(0 disponible)</span>
+                                </div>
+                            </div>
+                            <a href="https://zoom.us/billing" target="_blank" class="text-[10px] text-[#2D8CFF] hover:underline font-bold whitespace-nowrap ml-2">Comprar licencias</a>
+                        </div>
+
+                        <!-- Zoom Phone -->
+                        <div class="flex items-start justify-between text-xs">
+                            <div class="flex items-start space-x-2">
+                                <input type="checkbox" id="addon-zoom-phone" class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                                <div class="flex flex-col">
+                                    <span class="font-semibold text-slate-700">Zoom Phone Básico</span>
+                                    <span id="zoom-phone-label" class="text-[10px] text-slate-400 font-medium">(No habilitado)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Zoom Webinars -->
+                        <div class="flex items-start justify-between text-xs">
+                            <div class="flex items-start space-x-2">
+                                <input type="checkbox" id="addon-webinars" class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                                <div class="flex flex-col">
+                                    <span class="font-semibold text-slate-700">Zoom Webinars (500 asistentes)</span>
+                                    <span id="webinars-label" class="text-[10px] text-slate-400 font-medium">(0 disponible)</span>
+                                </div>
+                            </div>
+                            <a href="https://zoom.us/billing" target="_blank" class="text-[10px] text-[#2D8CFF] hover:underline font-bold whitespace-nowrap ml-2">Comprar licencias</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Target Group Select -->
+                <div>
+                    <label for="group-select" class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Grupo *</label>
+                    <select id="group-select" class="w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-[#2D8CFF] focus:ring-1 focus:ring-[#2D8CFF] rounded-xl outline-none text-sm transition-all duration-200">
+                        <option value="">Cargando grupos...</option>
+                    </select>
+                </div>
+
+                <!-- Action Buttons Grid -->
+                <div class="flex space-x-3 justify-end pt-4 border-t border-slate-100 mt-6">
+                    <button type="button" onclick="closeUserFormModal()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition-all duration-200">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="btn-submit" class="btn-glow px-6 py-2.5 bg-gradient-to-r from-[#D32F2F] to-[#2D8CFF] text-white font-semibold rounded-xl hover:scale-[1.01] focus:outline-none transition-all duration-200 flex items-center justify-center space-x-2 text-xs">
+                        <span id="btn-submit-text">Asignar Licencia y Grupo</span>
+                        <svg id="btn-submit-spinner" class="animate-spin h-4 w-4 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
