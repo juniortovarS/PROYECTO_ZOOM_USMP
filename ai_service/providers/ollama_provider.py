@@ -75,7 +75,9 @@ class OllamaProvider(BaseAIProvider):
             "stream": False,
             "options": {
                 "temperature": temperature,
-                "top_p": 0.9
+                "top_p": 0.9,
+                "num_ctx": 2048,
+                "num_predict": 512
             }
         }
 

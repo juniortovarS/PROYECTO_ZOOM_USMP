@@ -56,128 +56,144 @@ REPORTE DE FORMATO:
     ) -> Dict[str, Any]:
         start_time = time.time()
         
-        # Contexto del usuario
         user_context = {
             "user_email": user_email,
             "is_super_admin": is_super_admin,
             "assigned_group": assigned_group
         }
         
-        # 1. Guardar mensaje del usuario en el historial aislado
         conversation_id = f"conv_{user_email}"
         memory_store.save_chat_message(conversation_id, user_email, "user", message)
 
-        # 2. Cargar historial reciente y obtener contexto RAG
-        history = memory_store.get_chat_history(user_email, limit=10)
-        messages_payload = [{"role": h["role"], "content": h["content"]} for h in history]
+        msg_lower = message.strip().lower()
+        tools_executed = []
+        content = ""
 
-        # 3. Obtener esquemas de herramientas seguras disponibles para su rol
-        user_role_str = "super_admin" if is_super_admin else "user"
-        available_tools = registry.get_schemas_for_user(is_super_admin, user_role_str)
-
-        system_prompt = self._build_system_prompt(user_email, is_super_admin, assigned_group)
+        # --- SMART INTENT ROUTING (Vía Rápida Autónoma de Precisión e Inmediata) ---
         
-        # Inyectar contexto RAG relevante
-        rag_context = rag_engine.get_context_str(message)
-        if rag_context and "No se encontró" not in rag_context:
-            system_prompt += f"\n\nCONOCIMIENTO DE DOCUMENTACIÓN INTERNA DE LA USMP/ZOOM:\n{rag_context}"
+        # 1. Detección de Anomalías / Licencias Excedidas
+        if "anomal" in msg_lower or "excedid" in msg_lower or "conflict" in msg_lower:
+            from .tools.system_tools import detect_anomalies
+            tool_res = await detect_anomalies(user_context)
+            tools_executed.append({"name": "detect_anomalies", "result": tool_res})
+            
+            anomalies = tool_res.get("anomalies", [])
+            if not anomalies:
+                content = "✅ **Análisis de Sistema Completo**: No se detectaron anomalías ni licencias excedidas. El licenciamiento opera normalmente."
+            else:
+                lines = ["🔍 **Informe de Anomalías Detectadas en el Sistema**:\n"]
+                for idx, a in enumerate(anomalies, start=1):
+                    lines.append(f"**{idx}. [{a.get('severity', 'WARN')}] {a.get('type')}**")
+                    lines.append(f"└ {a.get('description')}\n")
+                content = "\n".join(lines)
 
-        # 4. Consultar al proveedor de IA local
-        response = await self.provider.chat_completion(
-            messages=messages_payload,
-            tools=available_tools,
-            system_prompt=system_prompt
+        # 2. Estadísticas generales de Licencias y Usuarios
+        elif "estadist" in msg_lower or "cuantas licencia" in msg_lower or "resumen" in msg_lower or "cuantos usuario" in msg_lower:
+            from .tools.system_tools import get_statistics
+            tool_res = await get_statistics(user_context)
+            tools_executed.append({"name": "get_statistics", "result": tool_res})
+            
+            st = tool_res.get("statistics", {})
+            content = (
+                f"📊 **Reporte de Estadísticas ({st.get('group')})**\n\n"
+                f"- **Licencias Contratadas (Licensed)**: `{st.get('total_licenses_contracted')}`\n"
+                f"- **Licencias Asignadas Activas**: `{st.get('used_licenses')}`\n"
+                f"- **Invitaciones Pendientes**: `{st.get('pending_invitations')}`\n"
+                f"- **Licencias Libres Reales Disponibles**: `{st.get('real_available_licenses')}`\n"
+                f"- **Total Usuarios Registrados en BD**: `{st.get('total_users_db')}`"
+            )
+
+        # 3. Lista de Facultades / Grupos
+        elif "facultad" in msg_lower or "grupo" in msg_lower and not ("agregar" in msg_lower or "crear" in msg_lower):
+            from .tools.system_tools import get_faculties
+            tool_res = await get_faculties(user_context)
+            tools_executed.append({"name": "get_faculties", "result": tool_res})
+            
+            facs = tool_res.get("faculties", [])
+            if facs:
+                lines = ["🏛️ **Facultades y Grupos Registrados en Zoom USMP**:\n"]
+                for f in facs[:15]:
+                    lines.append(f"- **{f.get('name')}** (ID: `{f.get('id')}`, Miembros: `{f.get('total_members', 0)}`)")
+                content = "\n".join(lines)
+            else:
+                content = "No se encontraron facultades disponibles para tu nivel de permisos."
+
+        # 4. Solicitud de Agregar Licencia / Usuario
+        elif "agregar" in msg_lower or "crear" in msg_lower or "invitar" in msg_lower:
+            import re
+            emails_found = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', message)
+            if emails_found:
+                target_email = emails_found[0]
+                target_group = assigned_group or "UVA"
+                
+                # Desencadenar solicitud de confirmación HITL directamente
+                tool_args = {"email": target_email, "group_name": target_group, "user_type": 2}
+                action_id = str(uuid.uuid4())[:8]
+                conf_msg = f"¿Confirmas crear e invitar al usuario '{target_email}' asignándolo a la facultad '{target_group}' con licencia Licensed (Zoom Meetings)?"
+                
+                PENDING_CONFIRMATIONS[action_id] = {
+                    "tool_name": "create_zoom_user",
+                    "tool_args": tool_args,
+                    "user_context": user_context,
+                    "user_email": user_email,
+                    "created_at": time.time()
+                }
+
+                prompt_resp = f"⚠️ **Confirmación requerida**\n\n{conf_msg}"
+                memory_store.save_chat_message(conversation_id, user_email, "assistant", prompt_resp, metadata={"confirmation_required": True, "action_id": action_id})
+                
+                return {
+                    "status": "confirmation_required",
+                    "action_id": action_id,
+                    "message": prompt_resp,
+                    "confirmation_message": conf_msg,
+                    "tool_name": "create_zoom_user",
+                    "tool_args": tool_args
+                }
+            else:
+                content = (
+                    "📝 **Para agregar o asignar una licencia a un docente**:\n\n"
+                    "Por favor proporcióname el **correo electrónico del docente** (ej: `docente@usmp.pe`) "
+                    "y la **facultad/grupo** a la que pertenece (ej: `UVA`, `FCCTP`, `FMH`).\n\n"
+                    "*Ejemplo*: `Agregar licencia a usuario.docente@usmp.pe en la facultad UVA`"
+                )
+
+        # 5. Si es una conversación general -> Pasar a Ollama con respuesta limpia sin repetitivos
+        else:
+            history = memory_store.get_chat_history(user_email, limit=6)
+            messages_payload = [{"role": h["role"], "content": h["content"]} for h in history]
+
+            user_role_str = "super_admin" if is_super_admin else "user"
+            available_tools = registry.get_schemas_for_user(is_super_admin, user_role_str)
+
+            system_prompt = self._build_system_prompt(user_email, is_super_admin, assigned_group)
+            system_prompt += "\nNOTA IMPORTANTE: Sé directo y conciso. NO repitas saludos introductorios ni digas 'Entendido. Soy el asistente...'. Responde directamente a la consulta."
+
+            rag_context = rag_engine.get_context_str(message)
+            if rag_context and "No se encontró" not in rag_context:
+                system_prompt += f"\n\nCONOCIMIENTO INTERNO:\n{rag_context}"
+
+            response = await self.provider.chat_completion(
+                messages=messages_payload,
+                tools=available_tools,
+                system_prompt=system_prompt,
+                temperature=0.1
+            )
+            content = response.get("content", "").strip()
+            if not content:
+                content = "Entendido. ¿Deseas consultar estadísticas, detectar anomalías o buscar usuarios de una facultad?"
+
+        # Registrar auditoría y guardar respuesta
+        ai_audit_logger.log_action(
+            user_email=user_email,
+            user_role="super_admin" if is_super_admin else "user",
+            assigned_group=assigned_group,
+            action_prompt=message,
+            tool_name=tools_executed[0]["name"] if tools_executed else None,
+            tool_result=tools_executed[0]["result"] if tools_executed else None,
+            status="SUCCESS"
         )
 
-        tool_calls = response.get("tool_calls", [])
-        content = response.get("content", "")
-        tools_executed = []
-
-        # 5. Si la IA decidió llamar a una herramienta (Tool Call)
-        if tool_calls:
-            for tc in tool_calls:
-                tool_name = tc.get("name")
-                tool_args = tc.get("arguments", {})
-                
-                tool = registry.get_tool(tool_name)
-                if not tool:
-                    continue
-
-                # A) Si la herramienta requiere confirmación explícita (HITL)
-                if tool.requires_confirmation:
-                    action_id = str(uuid.uuid4())[:8]
-                    conf_msg = tool.confirmation_message or f"¿Confirmas ejecutar la acción {tool_name} con parámetros {tool_args}?"
-                    for k, v in tool_args.items():
-                        conf_msg = conf_msg.replace(f"{{{k}}}", str(v))
-
-                    PENDING_CONFIRMATIONS[action_id] = {
-                        "tool_name": tool_name,
-                        "tool_args": tool_args,
-                        "user_context": user_context,
-                        "user_email": user_email,
-                        "created_at": time.time()
-                    }
-
-                    ai_audit_logger.log_action(
-                        user_email=user_email,
-                        user_role=user_role_str,
-                        assigned_group=assigned_group,
-                        action_prompt=message,
-                        tool_name=tool_name,
-                        tool_parameters=tool_args,
-                        status="CONFIRMATION_REQUIRED"
-                    )
-
-                    prompt_resp = f"⚠️ **Confirmación requerida**\n\n{conf_msg}"
-                    memory_store.save_chat_message(conversation_id, user_email, "assistant", prompt_resp, metadata={"confirmation_required": True, "action_id": action_id})
-                    
-                    return {
-                        "status": "confirmation_required",
-                        "action_id": action_id,
-                        "message": prompt_resp,
-                        "confirmation_message": conf_msg,
-                        "tool_name": tool_name,
-                        "tool_args": tool_args
-                    }
-
-                # B) Herramienta de Solo Lectura o Segura -> Ejecutar de inmediato
-                t_start = time.time()
-                try:
-                    tool_res = await tool.func(user_context, **tool_args)
-                    t_ms = int((time.time() - t_start) * 1000)
-                    
-                    ai_audit_logger.log_action(
-                        user_email=user_email,
-                        user_role=user_role_str,
-                        assigned_group=assigned_group,
-                        action_prompt=message,
-                        tool_name=tool_name,
-                        tool_parameters=tool_args,
-                        tool_result=tool_res,
-                        status="SUCCESS",
-                        execution_time_ms=t_ms
-                    )
-
-                    tools_executed.append({
-                        "name": tool_name,
-                        "result": tool_res
-                    })
-
-                    # Sintetizar respuesta final con el resultado de la herramienta
-                    synthesis_messages = messages_payload + [
-                        {"role": "assistant", "content": "", "tool_calls": [{"id": tc["id"], "type": "function", "function": {"name": tool_name, "arguments": str(tool_args)}}]},
-                        {"role": "tool", "name": tool_name, "content": str(tool_res)}
-                    ]
-                    
-                    synth_resp = await self.provider.chat_completion(
-                        messages=synthesis_messages,
-                        system_prompt=system_prompt
-                    )
-                    content = synth_resp.get("content") or f"Consulta ejecutada con éxito. Resultado de {tool_name}: {tool_res}"
-                except Exception as exc:
-                    content = f"Error al ejecutar la herramienta '{tool_name}': {str(exc)}"
-
-        # 6. Guardar respuesta final en historial
         memory_store.save_chat_message(conversation_id, user_email, "assistant", content, metadata={"tools_executed": [t["name"] for t in tools_executed]})
 
         exec_ms = int((time.time() - start_time) * 1000)
