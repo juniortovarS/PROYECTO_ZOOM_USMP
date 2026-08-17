@@ -55,6 +55,7 @@ REPORTE DE FORMATO:
         message: str
     ) -> Dict[str, Any]:
         start_time = time.time()
+        import re
         
         user_context = {
             "user_email": user_email,
@@ -69,17 +70,87 @@ REPORTE DE FORMATO:
         tools_executed = []
         content = ""
 
-        # --- SMART INTENT ROUTING (Vía Rápida Autónoma de Precisión e Inmediata) ---
-        
-        # 1. Detección de Anomalías / Licencias Excedidas
-        if "anomal" in msg_lower or "excedid" in msg_lower or "conflict" in msg_lower:
+        # Recuperar últimos mensajes para memoria conversacional
+        history = memory_store.get_chat_history(user_email, limit=6)
+        history_text = " ".join([h.get("content", "") for h in history]).lower()
+
+        # Extraer posibles correos en el mensaje actual o historial
+        emails_in_msg = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', message)
+        emails_in_history = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', history_text)
+        active_email = emails_in_msg[0] if emails_in_msg else (emails_in_history[-1] if emails_in_history else None)
+
+        # --- SMART CONTEXTUAL INTENT ROUTING ---
+
+        # 1. Corrección o Especificación de Facultad/Grupo durante la creación de usuario
+        if active_email and ("sino" in msg_lower or "no," in msg_lower or "facultad" in msg_lower or "grupo" in msg_lower) and ("agregar" in history_text or "invitar" in history_text or "licencia" in history_text or "confirmaci" in history_text):
+            # Extraer el nombre de la facultad del mensaje (ej: "Facultad UVA-OFICINA-VIRTUAL no, sino a la facultad UVA-OFICINA-VIRTUAL")
+            clean_group = message
+            for prefix in ["facultad", "grupo", "sino a la", "sino al", "sino", "no,", "no"]:
+                clean_group = re.sub(rf'\b{prefix}\b', '', clean_group, flags=re.IGNORECASE)
+            target_group = clean_group.strip().strip(':').strip('.').strip() or assigned_group or "UVA"
+
+            tool_args = {"email": active_email, "group_name": target_group, "user_type": 2}
+            action_id = str(uuid.uuid4())[:8]
+            conf_msg = f"Entendido, ajustado a la facultad **{target_group}**. ¿Confirmas crear e invitar al usuario '{active_email}' asignándolo al grupo '{target_group}' con licencia Licensed (Zoom Meetings)?"
+            
+            PENDING_CONFIRMATIONS[action_id] = {
+                "tool_name": "create_zoom_user",
+                "tool_args": tool_args,
+                "user_context": user_context,
+                "user_email": user_email,
+                "created_at": time.time()
+            }
+
+            prompt_resp = f"⚠️ **Confirmación requerida**\n\n{conf_msg}"
+            memory_store.save_chat_message(conversation_id, user_email, "assistant", prompt_resp, metadata={"confirmation_required": True, "action_id": action_id})
+            
+            return {
+                "status": "confirmation_required",
+                "action_id": action_id,
+                "message": prompt_resp,
+                "confirmation_message": conf_msg,
+                "tool_name": "create_zoom_user",
+                "tool_args": tool_args
+            }
+
+        # 2. El usuario solo proporcionó un correo electrónico (ej. jtovar@usmpvirtual.edu.pe)
+        elif emails_in_msg and len(message.strip().split()) <= 2:
+            target_email = emails_in_msg[0]
+            target_group = assigned_group or "UVA"
+            
+            tool_args = {"email": target_email, "group_name": target_group, "user_type": 2}
+            action_id = str(uuid.uuid4())[:8]
+            conf_msg = f"Perfecto, registraré al correo '{target_email}'. ¿Confirmas crearlo e invitarlo a la facultad '{target_group}' con licencia Licensed (Zoom Meetings)?"
+            
+            PENDING_CONFIRMATIONS[action_id] = {
+                "tool_name": "create_zoom_user",
+                "tool_args": tool_args,
+                "user_context": user_context,
+                "user_email": user_email,
+                "created_at": time.time()
+            }
+
+            prompt_resp = f"⚠️ **Confirmación requerida**\n\n{conf_msg}"
+            memory_store.save_chat_message(conversation_id, user_email, "assistant", prompt_resp, metadata={"confirmation_required": True, "action_id": action_id})
+            
+            return {
+                "status": "confirmation_required",
+                "action_id": action_id,
+                "message": prompt_resp,
+                "confirmation_message": conf_msg,
+                "tool_name": "create_zoom_user",
+                "tool_args": tool_args
+            }
+
+        # 3. Detección de Anomalías / Licencias Excedidas
+        elif "anomal" in msg_lower or "excedid" in msg_lower or "conflict" in msg_lower:
             from .tools.system_tools import detect_anomalies
             tool_res = await detect_anomalies(user_context)
             tools_executed.append({"name": "detect_anomalies", "result": tool_res})
             
             anomalies = tool_res.get("anomalies", [])
             if not anomalies:
-                content = "✅ **Análisis de Sistema Completo**: No se detectaron anomalías ni licencias excedidas. El licenciamiento opera normalmente."
+                content = "✅ **Análisis de Sistema Completo**: Todo opera con normalidad. No se detectaron anomalías ni licencias excedidas en la cuenta."
             else:
                 lines = ["🔍 **Informe de Anomalías Detectadas en el Sistema**:\n"]
                 for idx, a in enumerate(anomalies, start=1):
@@ -87,7 +158,7 @@ REPORTE DE FORMATO:
                     lines.append(f"└ {a.get('description')}\n")
                 content = "\n".join(lines)
 
-        # 2. Estadísticas generales de Licencias y Usuarios
+        # 4. Estadísticas generales de Licencias y Usuarios
         elif "estadist" in msg_lower or "cuantas licencia" in msg_lower or "resumen" in msg_lower or "cuantos usuario" in msg_lower:
             from .tools.system_tools import get_statistics
             tool_res = await get_statistics(user_context)
@@ -95,16 +166,16 @@ REPORTE DE FORMATO:
             
             st = tool_res.get("statistics", {})
             content = (
-                f"📊 **Reporte de Estadísticas ({st.get('group')})**\n\n"
+                f"📊 **Reporte de Estadísticas de Licenciamiento ({st.get('group')})**\n\n"
                 f"- **Licencias Contratadas (Licensed)**: `{st.get('total_licenses_contracted')}`\n"
                 f"- **Licencias Asignadas Activas**: `{st.get('used_licenses')}`\n"
                 f"- **Invitaciones Pendientes**: `{st.get('pending_invitations')}`\n"
                 f"- **Licencias Libres Reales Disponibles**: `{st.get('real_available_licenses')}`\n"
-                f"- **Total Usuarios Registrados en BD**: `{st.get('total_users_db')}`"
+                f"- **Total Usuarios en Sistema**: `{st.get('total_users_db')}`"
             )
 
-        # 3. Lista de Facultades / Grupos
-        elif "facultad" in msg_lower or "grupo" in msg_lower and not ("agregar" in msg_lower or "crear" in msg_lower):
+        # 5. Lista de Facultades / Grupos (Solo si el usuario explícitamente pide ver o listar facultades)
+        elif "ver facultades" in msg_lower or "listar facultades" in msg_lower or "que facultades" in msg_lower or "lista de grupos" in msg_lower:
             from .tools.system_tools import get_faculties
             tool_res = await get_faculties(user_context)
             tools_executed.append({"name": "get_faculties", "result": tool_res})
@@ -113,23 +184,25 @@ REPORTE DE FORMATO:
             if facs:
                 lines = ["🏛️ **Facultades y Grupos Registrados en Zoom USMP**:\n"]
                 for f in facs[:15]:
-                    lines.append(f"- **{f.get('name')}** (ID: `{f.get('id')}`, Miembros: `{f.get('total_members', 0)}`)")
+                    lines.append(f"- **{f.get('name')}** (Miembros activos: `{f.get('total_members', 0)}`)")
                 content = "\n".join(lines)
             else:
-                content = "No se encontraron facultades disponibles para tu nivel de permisos."
+                content = "No se encontraron facultades disponibles para tus permisos."
 
-        # 4. Solicitud de Agregar Licencia / Usuario
-        elif "agregar" in msg_lower or "crear" in msg_lower or "invitar" in msg_lower:
-            import re
-            emails_found = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', message)
-            if emails_found:
-                target_email = emails_found[0]
-                target_group = assigned_group or "UVA"
+        # 6. Solicitud de Agregar Licencia / Usuario con correo explícito
+        elif "agregar" in msg_lower or "crear" in msg_lower or "invitar" in msg_lower or "licencia" in msg_lower:
+            if emails_in_msg:
+                target_email = emails_in_msg[0]
                 
-                # Desencadenar solicitud de confirmación HITL directamente
+                # Detectar si especificó facultad en el mensaje
+                target_group = assigned_group or "UVA"
+                for word in message.split():
+                    if word.isupper() and len(word) >= 3 and word not in ["ZOOM", "USMP", "UVA"]:
+                        target_group = word
+                
                 tool_args = {"email": target_email, "group_name": target_group, "user_type": 2}
                 action_id = str(uuid.uuid4())[:8]
-                conf_msg = f"¿Confirmas crear e invitar al usuario '{target_email}' asignándolo a la facultad '{target_group}' con licencia Licensed (Zoom Meetings)?"
+                conf_msg = f"¿Confirmas crear e invitar al usuario '{target_email}' asignándolo a la facultad **{target_group}** con licencia Licensed (Zoom Meetings)?"
                 
                 PENDING_CONFIRMATIONS[action_id] = {
                     "tool_name": "create_zoom_user",
@@ -152,22 +225,20 @@ REPORTE DE FORMATO:
                 }
             else:
                 content = (
-                    "📝 **Para agregar o asignar una licencia a un docente**:\n\n"
-                    "Por favor proporcióname el **correo electrónico del docente** (ej: `docente@usmp.pe`) "
-                    "y la **facultad/grupo** a la que pertenece (ej: `UVA`, `FCCTP`, `FMH`).\n\n"
-                    "*Ejemplo*: `Agregar licencia a usuario.docente@usmp.pe en la facultad UVA`"
+                    "📝 **Asignación de Licencia Zoom**:\n\n"
+                    "Por favor indícame el **correo del docente** (ej: `docente@usmp.pe`) "
+                    "y la **facultad/grupo** a la que pertenece (ej: `UVA`, `FCCTP`, `FMH`)."
                 )
 
-        # 5. Si es una conversación general -> Pasar a Ollama con respuesta limpia sin repetitivos
+        # 7. Conversaciones o preguntas abiertas -> Pasar a Ollama con respuesta limpia y directa
         else:
-            history = memory_store.get_chat_history(user_email, limit=6)
             messages_payload = [{"role": h["role"], "content": h["content"]} for h in history]
 
             user_role_str = "super_admin" if is_super_admin else "user"
             available_tools = registry.get_schemas_for_user(is_super_admin, user_role_str)
 
             system_prompt = self._build_system_prompt(user_email, is_super_admin, assigned_group)
-            system_prompt += "\nNOTA IMPORTANTE: Sé directo y conciso. NO repitas saludos introductorios ni digas 'Entendido. Soy el asistente...'. Responde directamente a la consulta."
+            system_prompt += "\nINSTRUCCIÓN CRÍTICA: Responde de forma muy natural, amigable, breve y directa en 1 o 2 oraciones. NUNCA uses presentaciones repetitivas."
 
             rag_context = rag_engine.get_context_str(message)
             if rag_context and "No se encontró" not in rag_context:
@@ -181,7 +252,7 @@ REPORTE DE FORMATO:
             )
             content = response.get("content", "").strip()
             if not content:
-                content = "Entendido. ¿Deseas consultar estadísticas, detectar anomalías o buscar usuarios de una facultad?"
+                content = "¡Hola! ¿En qué puedo ayudarte hoy con la gestión de licencias o facultades?"
 
         # Registrar auditoría y guardar respuesta
         ai_audit_logger.log_action(

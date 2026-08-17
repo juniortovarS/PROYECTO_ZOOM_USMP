@@ -1682,7 +1682,7 @@
             }
         }
 
-        function appendAIMessageBubble(role, content, metadata = null) {
+        function appendAIMessageBubble(role, content, metadata = null, animate = true) {
             const container = document.getElementById('ai-chat-messages');
             if (!container) return;
 
@@ -1699,6 +1699,8 @@
                         👤
                     </div>
                 `;
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
             } else {
                 let badgeHtml = '';
                 if (metadata && metadata.tools_executed && metadata.tools_executed.length > 0) {
@@ -1708,6 +1710,7 @@
                 }
 
                 let formattedContent = formatMarkdown(content);
+                const textId = 'ai-text-' + Math.random().toString(36).substring(2, 9);
 
                 div.innerHTML = `
                     <div class="flex-shrink-0 w-7 h-7 rounded-lg bg-[#2D8CFF] text-white flex items-center justify-center font-bold text-xs shadow-sm">
@@ -1715,13 +1718,32 @@
                     </div>
                     <div class="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm max-w-[85%] text-xs space-y-1.5 leading-relaxed text-slate-700">
                         ${badgeHtml}
-                        <div>${formattedContent}</div>
+                        <div id="${textId}">${animate ? '' : formattedContent}</div>
                     </div>
                 `;
-            }
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
 
-            container.appendChild(div);
-            container.scrollTop = container.scrollHeight;
+                if (animate) {
+                    const textEl = document.getElementById(textId);
+                    if (textEl) {
+                        let i = 0;
+                        const fullText = formattedContent;
+                        const step = fullText.length > 250 ? 5 : 2;
+                        function type() {
+                            if (i < fullText.length) {
+                                textEl.innerHTML = fullText.substring(0, i + step);
+                                i += step;
+                                container.scrollTop = container.scrollHeight;
+                                setTimeout(type, 12);
+                            } else {
+                                textEl.innerHTML = fullText;
+                            }
+                        }
+                        type();
+                    }
+                }
+            }
         }
 
         function appendAIConfirmationCard(actionId, message, toolName) {
@@ -1778,8 +1800,13 @@
             loadingDiv.className = 'flex items-start space-x-2.5 animate-pulse';
             loadingDiv.innerHTML = `
                 <div class="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">🤖</div>
-                <div class="bg-white p-3 rounded-2xl border border-slate-100 text-xs text-slate-400 font-medium italic">
-                    Procesando consulta y analizando datos del sistema...
+                <div class="bg-white p-3 rounded-2xl border border-slate-100 text-xs text-slate-500 font-semibold flex items-center space-x-2">
+                    <span class="flex space-x-1">
+                        <span class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"></span>
+                        <span class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                        <span class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                    </span>
+                    <span>Analizando consulta y verificando sistema...</span>
                 </div>
             `;
             container.appendChild(loadingDiv);
