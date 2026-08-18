@@ -2,7 +2,7 @@ import pymysql
 import httpx
 from typing import Dict, Any, Optional, List
 from .registry import registry
-from main import DB_HOST, DB_USER, DB_PASS, DB_NAME, get_zoom_access_token, fetch_pending_users_with_groups
+from main import DB_HOST, DB_USER, DB_PASS, DB_NAME, get_zoom_access_token, fetch_pending_users_with_groups, get_zoom_group_id_by_name, fetch_active_users, get_zoom_group_name_by_id
 
 def _get_db():
     return pymysql.connect(
@@ -96,18 +96,21 @@ import asyncio
 
 @registry.register(
     name="get_users",
-    description="Obtiene y busca usuarios en el sistema y en Zoom respetando los permisos de facultad.",
+    description="Obtiene y busca usuarios en el sistema y en Zoom (activos o pendientes) respetando los permisos de facultad. Para verificar si un correo específico tiene licencia, pásalo en 'query'.",
     parameters={
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "Nombre, apellido o correo a buscar (opcional)"},
+            "query": {"type": "string", "description": "Nombre, apellido o correo exacto a buscar (opcional)"},
             "group_name": {"type": "string", "description": "Filtrar por facultad/grupo (opcional)"},
             "status": {"type": "string", "description": "'active' o 'pending'"}
         }
     },
     required_role="user"
 )
-async def get_users(context: Dict[str, Any], query: Optional[str] = None, group_name: Optional[str] = None, status: Optional[str] = None) -> Dict[str, Any]:
+async def get_users(context: Dict[str, Any], query: Optional[str] = None, group_name: Optional[str] = None, status: Optional[str] = None, email: Optional[str] = None) -> Dict[str, Any]:
+    # Tolerar que el modelo mande 'email' en vez de 'query'
+    query = query or email
+
     assigned_group = context.get("assigned_group")
     is_super_admin = context.get("is_super_admin", False)
 
@@ -118,21 +121,104 @@ async def get_users(context: Dict[str, Any], query: Optional[str] = None, group_
     token = await get_zoom_access_token()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    # Si la consulta parece un correo exacto, buscarlo directo en Zoom (cubre usuarios ACTIVOS, no solo pendientes)
+    if query and "@" in query:
+        target = query.strip().lower()
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.get(f"https://api.zoom.us/v2/users/{target}", headers=headers)
+        if res.status_code == 200:
+            u = res.json()
+            group_ids = u.get("group_ids", [])
+            if effective_group and not is_super_admin:
+                # Confirmar que el usuario realmente pertenece a la facultad permitida antes de exponerlo
+                restricted_id = await get_zoom_group_id_by_name(effective_group, headers)
+                if restricted_id and restricted_id not in group_ids:
+                    return {"status": "success", "total_pending_found": 0, "users_sample": []}
+
+            # Resolver el/los grupo(s) REALES del usuario (no el filtro de búsqueda)
+            real_groups = []
+            for gid in group_ids:
+                gname = await get_zoom_group_name_by_id(gid, headers)
+                if gname:
+                    real_groups.append(gname)
+
+            type_map = {1: "Basic (Sin licencia)", 2: "Licensed (Zoom Meetings)", 99: "On-Prem"}
+            return {
+                "status": "success",
+                "total_pending_found": 1,
+                "users_sample": [{
+                    "email": u.get("email"),
+                    "first_name": u.get("first_name", ""),
+                    "last_name": u.get("last_name", ""),
+                    "license_status": type_map.get(u.get("type"), "Desconocido"),
+                    "account_status": u.get("status"),
+                    "groups": real_groups
+                }]
+            }
+        # Si no está activo (404), sigue abajo para buscarlo entre los pendientes de invitación
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
         all_pending = await fetch_pending_users_with_groups(client, headers)
-        
+
         # Filtrar por grupo si corresponde
         if effective_group:
             all_pending = [u for u in all_pending if u.get("groups") and u.get("groups")[0].strip().lower() == effective_group.strip().lower()]
-            
-        if query:
-            q = query.strip().lower()
-            all_pending = [u for u in all_pending if q in u.get("email", "").lower() or q in u.get("first_name", "").lower() or q in u.get("last_name", "").lower()]
 
+        if query:
+            q_words_pending = [w for w in query.strip().lower().split() if w]
+            all_pending = [
+                u for u in all_pending
+                if all(w in f"{u.get('first_name', '')} {u.get('last_name', '')} {u.get('email', '')}".lower() for w in q_words_pending)
+            ]
+
+        # Búsqueda por nombre entre usuarios ACTIVOS (Zoom no soporta buscar por nombre en su API,
+        # así que se recorre el listado completo y se filtra localmente). Se exige que TODAS las
+        # palabras del query aparezcan en el nombre completo o el correo, sin exigir que sean
+        # contiguas (ej. "Pablo Casma" debe encontrar a "Pablo Ivan Casma Angulo").
+        active_matches = []
+        if query and "@" not in query and status != "pending":
+            q_words = [w for w in query.strip().lower().split() if w]
+            active_users = await fetch_active_users(client, headers)
+            type_map = {1: "Basic (Sin licencia)", 2: "Licensed (Zoom Meetings)", 99: "On-Prem"}
+
+            def _matches(u):
+                haystack = f"{u.get('first_name') or ''} {u.get('last_name') or ''} {u.get('email') or ''}".lower()
+                return all(w in haystack for w in q_words)
+
+            candidates = [u for u in active_users if _matches(u)][:5]
+
+            restricted_id = await get_zoom_group_id_by_name(effective_group, headers) if effective_group else None
+            for u in candidates:
+                # Se consulta el detalle para obtener el/los grupo(s) REALES (la lista general no los trae)
+                detail_res = await client.get(f"https://api.zoom.us/v2/users/{u.get('email')}", headers=headers)
+                group_ids = []
+                if detail_res.status_code == 200:
+                    group_ids = detail_res.json().get("group_ids", [])
+
+                if effective_group:
+                    if not (restricted_id and restricted_id in group_ids):
+                        continue  # no pertenece a la facultad permitida/filtrada, se omite
+
+                real_groups = []
+                for gid in group_ids:
+                    gname = await get_zoom_group_name_by_id(gid, headers)
+                    if gname:
+                        real_groups.append(gname)
+
+                active_matches.append({
+                    "email": u.get("email"),
+                    "first_name": u.get("first_name", ""),
+                    "last_name": u.get("last_name", ""),
+                    "license_status": type_map.get(u.get("type"), "Desconocido"),
+                    "account_status": u.get("status"),
+                    "groups": real_groups
+                })
+
+        combined = active_matches + all_pending
         return {
             "status": "success",
-            "total_pending_found": len(all_pending),
-            "users_sample": all_pending[:15]
+            "total_pending_found": len(combined),
+            "users_sample": combined[:15]
         }
 
 @registry.register(
@@ -155,7 +241,7 @@ async def get_audit_logs(context: Dict[str, Any], email_filter: Optional[str] = 
     try:
         conn = _get_db()
         with conn.cursor() as cursor:
-            sql = "SELECT id, operator_email, action_type, target_email, details, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as created_at FROM zoom_activity_logs WHERE 1=1"
+            sql = "SELECT id, operator_email, action_type, target_email, details, DATE_FORMAT(created_at, '%%Y-%%m-%%d %%H:%%i:%%s') as created_at FROM zoom_activity_logs WHERE 1=1"
             params = []
             
             if not is_super_admin and assigned_group:

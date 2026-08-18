@@ -1,7 +1,15 @@
 import httpx
+import pymysql
 from typing import Dict, Any, Optional
 from .registry import registry
-from main import get_zoom_access_token, get_zoom_group_id_by_name
+from main import get_zoom_access_token, get_zoom_group_id_by_name, DB_HOST, DB_USER, DB_PASS, DB_NAME
+
+
+def _open_db_conn():
+    return pymysql.connect(
+        host=DB_HOST, user=DB_USER, password=DB_PASS, database=DB_NAME,
+        charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor
+    )
 
 @registry.register(
     name="create_zoom_user",
@@ -30,8 +38,8 @@ async def create_zoom_user(
     user_type: int = 2
 ) -> Dict[str, Any]:
     # Enrutado a través de la función del backend para respetar validaciones
-    from main import create_and_assign_user, UserCreateRequest, get_db_conn
-    
+    from main import create_and_assign_user, UserCreateRequest
+
     assigned_group = context.get("assigned_group")
     is_super_admin = context.get("is_super_admin", False)
 
@@ -48,6 +56,16 @@ async def create_zoom_user(
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     group_id = await get_zoom_group_id_by_name(effective_group, headers)
 
+    if not group_id:
+        return {
+            "status": "error",
+            "message": (
+                f"No encontré ninguna facultad/grupo de Zoom llamado '{effective_group}'. "
+                "Verifica el nombre exacto (usa la herramienta de listar facultades) antes de continuar. "
+                "No se creó ni modificó ningún usuario."
+            )
+        }
+
     req = UserCreateRequest(
         email=email,
         first_name=first_name,
@@ -56,12 +74,14 @@ async def create_zoom_user(
         user_type=user_type
     )
 
+    conn = _open_db_conn()
     try:
-        conn = next(get_db_conn())
         res = await create_and_assign_user(request=req, current_user=context.get("user_email"), db=conn)
         return {"status": "success", "result": res}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    finally:
+        conn.close()
 
 @registry.register(
     name="remove_group_licenses_mass",
@@ -78,8 +98,8 @@ async def create_zoom_user(
     confirmation_message="⚠️ ¡ATENCIÓN! ¿Confirmas quitar las licencias de pago (Zoom Meetings) a TODOS los usuarios del grupo '{group_name}' y pasarlos a categoría Basic?"
 )
 async def remove_group_licenses_mass(context: Dict[str, Any], group_name: str) -> Dict[str, Any]:
-    from main import remove_licenses_mass, get_db_conn
-    
+    from main import remove_licenses_mass
+
     assigned_group = context.get("assigned_group")
     is_super_admin = context.get("is_super_admin", False)
 
@@ -97,9 +117,11 @@ async def remove_group_licenses_mass(context: Dict[str, Any], group_name: str) -
     if not group_id:
         return {"status": "error", "message": f"No se encontró el grupo de Zoom con nombre '{group_name}'."}
 
+    conn = _open_db_conn()
     try:
-        conn = next(get_db_conn())
         res = await remove_licenses_mass(group_id=group_id, current_user=context.get("user_email"), db=conn)
         return {"status": "success", "result": res}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    finally:
+        conn.close()

@@ -21,6 +21,93 @@ class AgentOrchestrator:
     def __init__(self, provider: Optional[OllamaProvider] = None):
         self.provider = provider or OllamaProvider()
 
+    _SEARCH_QUERY_STOPWORDS = {
+        "el", "la", "los", "las", "un", "una", "al", "de", "del", "con", "nombre", "llamado", "llamada",
+        "usuario", "usuarios", "puedes", "podrias", "podrías", "puedo", "podemos", "ayudar", "ayudarme",
+        "buscar", "busca", "encontrar", "encuentra", "existe", "hay", "algun", "algún", "alguna",
+        "a", "me", "mi", "es", "que", "por", "favor", "quisiera", "quiero", "necesito", "tiene", "si"
+    }
+
+    def _extract_search_query(self, message: str) -> str:
+        """Extrae el nombre a buscar de un mensaje tipo 'hay un usuario con nombre Pablo Casma?',
+        quitando muletillas/verbos comunes. Solo se usa cuando el mensaje NO trae un correo explícito."""
+        import re as _re
+        words = _re.findall(r"[^\s?¿.,:!¡]+", message)
+        kept = [w for w in words if w.lower().strip("¿?.,:") not in self._SEARCH_QUERY_STOPWORDS]
+        return " ".join(kept).strip()
+
+    def _extract_group_name(self, message: str) -> Optional[str]:
+        """Intenta extraer un nombre de facultad/grupo explícito del mensaje (tras 'grupo'/'facultad'/'sino').
+        Devuelve None si no encuentra nada, para que el llamador decida el fallback."""
+        import re
+        matches = re.findall(r'(?:grupo|facultad)\s*(?:es|:)?\s*([^,.;\n]+)', message, flags=re.IGNORECASE)
+        if matches:
+            candidate = matches[-1].strip()
+            candidate = re.sub(r'\s*\b(no|sino|es)\b\s*$', '', candidate, flags=re.IGNORECASE).strip()
+            if candidate:
+                return candidate
+        m = re.search(r'sino(?:\s+a\s+la|\s+al)?\s+([^,.;\n]+)', message, flags=re.IGNORECASE)
+        if m and m.group(1).strip():
+            return m.group(1).strip()
+        return None
+
+    def _format_tool_result(self, tool_name: str, result: Dict[str, Any]) -> str:
+        if result.get("status") == "error":
+            return f"⚠️ {result.get('message', 'Ocurrió un error al ejecutar la operación.')}"
+
+        if tool_name == "get_statistics":
+            st = result.get("statistics", {})
+            return (
+                f"📊 **Reporte de Estadísticas de Licenciamiento ({st.get('group')})**\n\n"
+                f"- **Licencias Contratadas (Licensed)**: `{st.get('total_licenses_contracted')}`\n"
+                f"- **Licencias Asignadas Activas**: `{st.get('used_licenses')}`\n"
+                f"- **Invitaciones Pendientes**: `{st.get('pending_invitations')}`\n"
+                f"- **Licencias Libres Reales Disponibles**: `{st.get('real_available_licenses')}`\n"
+                f"- **Total Usuarios en Sistema**: `{st.get('total_users_db')}`"
+            )
+
+        if tool_name == "get_faculties":
+            facs = result.get("faculties", [])
+            if not facs:
+                return "No se encontraron facultades disponibles para tus permisos."
+            lines = ["🏛️ **Facultades y Grupos Registrados en Zoom USMP**:\n"]
+            for f in facs[:15]:
+                lines.append(f"- **{f.get('name')}** (Miembros activos: `{f.get('total_members', 0)}`)")
+            return "\n".join(lines)
+
+        if tool_name == "detect_anomalies":
+            anomalies = result.get("anomalies", [])
+            if not anomalies:
+                return "✅ **Análisis de Sistema Completo**: Todo opera con normalidad. No se detectaron anomalías ni licencias excedidas en la cuenta."
+            lines = ["🔍 **Informe de Anomalías Detectadas en el Sistema**:\n"]
+            for idx, a in enumerate(anomalies, start=1):
+                lines.append(f"**{idx}. [{a.get('severity', 'WARN')}] {a.get('type')}**")
+                lines.append(f"└ {a.get('description')}\n")
+            return "\n".join(lines)
+
+        if tool_name == "get_users":
+            users = result.get("users_sample", [])
+            if not users:
+                return "No se encontraron usuarios que coincidan con tu búsqueda (ni activos ni con invitación pendiente)."
+            lines = ["👤 **Usuarios encontrados**:\n"]
+            for u in users[:15]:
+                grupo = (u.get("groups") or ["N/A"])[0]
+                licencia = u.get("license_status")
+                extra = f" — Licencia: **{licencia}**" if licencia else ""
+                lines.append(f"- **{u.get('email')}** — {u.get('first_name', '')} {u.get('last_name', '')} (Grupo: {grupo}){extra}")
+            return "\n".join(lines)
+
+        if tool_name == "get_audit_logs":
+            logs = result.get("logs", [])
+            if not logs:
+                return "No se encontraron registros de auditoría con esos filtros."
+            lines = ["📋 **Registros de Auditoría**:\n"]
+            for log in logs[:15]:
+                lines.append(f"- `{log.get('created_at')}` — {log.get('operator_email')} → {log.get('action_type')} ({log.get('target_email', '')})")
+            return "\n".join(lines)
+
+        return f"✅ Operación `{tool_name}` ejecutada correctamente."
+
     def _build_system_prompt(self, user_email: str, is_super_admin: bool, assigned_group: Optional[str]) -> str:
         memories_str = memory_store.get_formatted_memories(user_email)
         
@@ -79,19 +166,63 @@ REPORTE DE FORMATO:
         emails_in_history = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', history_text)
         active_email = emails_in_msg[0] if emails_in_msg else (emails_in_history[-1] if emails_in_history else None)
 
+        # Marcadores de intención de CONSULTA (no de creación), para no confundir "¿tiene licencia?" con "agrégale licencia"
+        QUERY_INTENT_MARKERS = (
+            "valid", "verific", "consult", "busca", "revisa", "chequea", "existe",
+            "saber si", "quiero saber", "sabes si", "dime si", "me puedes decir",
+            "puedes decirme", "puedes confirmar", "me confirmas", "confirmar si",
+            "cuál es el estado", "cual es el estado", "está activ", "esta activ",
+            "tiene o no", "tiene licencia", "cuenta con licencia", "cuenta con una licencia"
+        )
+        is_query_intent = any(q in msg_lower for q in QUERY_INTENT_MARKERS)
+
+        # Intención explícita de BUSCAR un usuario puntual: se enruta directo a la herramienta
+        # get_users (sin pasar por el juicio del modelo) porque un modelo de 3B, unos turnos
+        # más adelante en la conversación, a veces "alucina" un usuario/licencia inventado en
+        # vez de invocar la tool — y aquí una respuesta inventada es inaceptable (puede llevar
+        # a un admin a confiar en datos de licencia falsos).
+        SEARCH_USER_MARKERS = (
+            "busca el usuario", "busca al usuario", "buscar el usuario", "buscar al usuario",
+            "busca a", "buscar a", "encuentra al usuario", "encuentra el usuario", "encuentra a",
+            "existe un usuario", "existe el usuario", "hay un usuario", "hay algun usuario", "hay algún usuario"
+        )
+        is_search_user_intent = any(m in msg_lower for m in SEARCH_USER_MARKERS)
+
+        # Detectar si el ÚLTIMO turno del asistente fue una confirmación de create_zoom_user aún pendiente
+        # (evita que un "grupo"/"facultad" mencionado mucho después reviva una confirmación vieja y ya abandonada)
+        # y también capturar el texto de ese último turno, para saber si el asistente estaba pidiendo
+        # un correo para CONSULTAR (no para crear).
+        pending_creation = None
+        last_assistant_text = ""
+        for h in reversed(history):
+            if h.get("role") != "assistant":
+                continue
+            last_assistant_text = (h.get("content") or "").lower()
+            meta = h.get("metadata") or {}
+            aid = meta.get("action_id")
+            if meta.get("confirmation_required") and aid in PENDING_CONFIRMATIONS:
+                candidate = PENDING_CONFIRMATIONS[aid]
+                if candidate.get("tool_name") == "create_zoom_user" and candidate.get("user_email") == user_email:
+                    pending_creation = (aid, candidate)
+            break
+
+        # El asistente venía preguntando algo de tipo consulta (no de creación) en su último turno
+        last_assistant_was_query = any(q in last_assistant_text for q in QUERY_INTENT_MARKERS)
+
         # --- SMART CONTEXTUAL INTENT ROUTING ---
 
-        # 1. Corrección o Especificación de Facultad/Grupo durante la creación de usuario
-        if active_email and ("sino" in msg_lower or "no," in msg_lower or "facultad" in msg_lower or "grupo" in msg_lower) and ("agregar" in history_text or "invitar" in history_text or "licencia" in history_text or "confirmaci" in history_text):
-            # Extraer el nombre de la facultad del mensaje (ej: "Facultad UVA-OFICINA-VIRTUAL no, sino a la facultad UVA-OFICINA-VIRTUAL")
-            clean_group = message
-            for prefix in ["facultad", "grupo", "sino a la", "sino al", "sino", "no,", "no"]:
-                clean_group = re.sub(rf'\b{prefix}\b', '', clean_group, flags=re.IGNORECASE)
-            target_group = clean_group.strip().strip(':').strip('.').strip() or assigned_group or "UVA"
+        # 1. Corrección o Especificación de Facultad/Grupo mientras hay una confirmación de creación pendiente
+        if pending_creation and not is_query_intent and ("sino" in msg_lower or "no," in msg_lower or "facultad" in msg_lower or "grupo" in msg_lower):
+            old_action_id, old_pending = pending_creation
+            PENDING_CONFIRMATIONS.pop(old_action_id, None)
 
-            tool_args = {"email": active_email, "group_name": target_group, "user_type": 2}
+            target_email = active_email or old_pending["tool_args"].get("email")
+            # Extraer el nombre de la facultad del mensaje (ej: "Facultad UVA-OFICINA-VIRTUAL no, sino a la facultad UVA-OFICINA-VIRTUAL")
+            target_group = self._extract_group_name(message) or assigned_group or "UVA"
+
+            tool_args = {"email": target_email, "group_name": target_group, "user_type": old_pending["tool_args"].get("user_type", 2)}
             action_id = str(uuid.uuid4())[:8]
-            conf_msg = f"Entendido, ajustado a la facultad **{target_group}**. ¿Confirmas crear e invitar al usuario '{active_email}' asignándolo al grupo '{target_group}' con licencia Licensed (Zoom Meetings)?"
+            conf_msg = f"Entendido, ajustado a la facultad **{target_group}**. ¿Confirmas crear e invitar al usuario '{target_email}' asignándolo al grupo '{target_group}' con licencia Licensed (Zoom Meetings)?"
             
             PENDING_CONFIRMATIONS[action_id] = {
                 "tool_name": "create_zoom_user",
@@ -114,7 +245,8 @@ REPORTE DE FORMATO:
             }
 
         # 2. El usuario solo proporcionó un correo electrónico (ej. jtovar@usmpvirtual.edu.pe)
-        elif emails_in_msg and len(message.strip().split()) <= 2:
+        #    (pero no si el asistente lo pidió para CONSULTAR, no para crear)
+        elif emails_in_msg and len(message.strip().split()) <= 2 and not last_assistant_was_query:
             target_email = emails_in_msg[0]
             target_group = assigned_group or "UVA"
             
@@ -189,16 +321,30 @@ REPORTE DE FORMATO:
             else:
                 content = "No se encontraron facultades disponibles para tus permisos."
 
-        # 6. Solicitud de Agregar Licencia / Usuario con correo explícito
-        elif "agregar" in msg_lower or "crear" in msg_lower or "invitar" in msg_lower or "licencia" in msg_lower:
+        # 5b. Búsqueda explícita de un usuario puntual (determinístico: nunca delegar esto al LLM)
+        elif is_search_user_intent:
+            from .tools.system_tools import get_users
+            search_query = emails_in_msg[0] if emails_in_msg else self._extract_search_query(message)
+
+            if search_query:
+                tool_res = await get_users(user_context, query=search_query)
+                tools_executed.append({"name": "get_users", "result": tool_res})
+                content = self._format_tool_result("get_users", tool_res)
+            else:
+                content = "¿Qué usuario deseas buscar? Indícame su nombre completo o correo."
+
+        # 6. Solicitud de Agregar Licencia / Usuario con correo explícito (no confundir con una consulta/validación)
+        elif not is_query_intent and ("agregar" in msg_lower or "crear" in msg_lower or "invitar" in msg_lower or "licencia" in msg_lower):
             if emails_in_msg:
                 target_email = emails_in_msg[0]
                 
-                # Detectar si especificó facultad en el mensaje
-                target_group = assigned_group or "UVA"
-                for word in message.split():
-                    if word.isupper() and len(word) >= 3 and word not in ["ZOOM", "USMP", "UVA"]:
-                        target_group = word
+                # Detectar si especificó facultad en el mensaje (por keyword, o como palabra en mayúsculas)
+                target_group = self._extract_group_name(message)
+                if not target_group:
+                    target_group = assigned_group or "UVA"
+                    for word in message.split():
+                        if word.isupper() and len(word) >= 3 and word not in ["ZOOM", "USMP", "UVA"]:
+                            target_group = word
                 
                 tool_args = {"email": target_email, "group_name": target_group, "user_type": 2}
                 action_id = str(uuid.uuid4())[:8]
@@ -250,9 +396,55 @@ REPORTE DE FORMATO:
                 system_prompt=system_prompt,
                 temperature=0.1
             )
-            content = response.get("content", "").strip()
-            if not content:
-                content = "¡Hola! ¿En qué puedo ayudarte hoy con la gestión de licencias o facultades?"
+
+            tool_calls = response.get("tool_calls") or []
+            if tool_calls:
+                call = tool_calls[0]
+                tool_name = call.get("name")
+                tool_args = call.get("arguments") or {}
+                tool = registry.get_tool(tool_name)
+
+                if not tool:
+                    content = response.get("content", "").strip() or "No reconozco esa acción, ¿puedes reformular tu solicitud?"
+                elif tool.required_role == "super_admin" and not is_super_admin:
+                    content = "⚠️ No tienes permisos suficientes para ejecutar esa acción."
+                elif tool.requires_confirmation:
+                    action_id = str(uuid.uuid4())[:8]
+                    try:
+                        conf_msg = tool.confirmation_message.format(**tool_args) if tool.confirmation_message else f"¿Confirmas ejecutar '{tool_name}'?"
+                    except Exception:
+                        conf_msg = f"¿Confirmas ejecutar '{tool_name}' con los datos proporcionados?"
+
+                    PENDING_CONFIRMATIONS[action_id] = {
+                        "tool_name": tool_name,
+                        "tool_args": tool_args,
+                        "user_context": user_context,
+                        "user_email": user_email,
+                        "created_at": time.time()
+                    }
+
+                    prompt_resp = f"⚠️ **Confirmación requerida**\n\n{conf_msg}"
+                    memory_store.save_chat_message(conversation_id, user_email, "assistant", prompt_resp, metadata={"confirmation_required": True, "action_id": action_id})
+
+                    return {
+                        "status": "confirmation_required",
+                        "action_id": action_id,
+                        "message": prompt_resp,
+                        "confirmation_message": conf_msg,
+                        "tool_name": tool_name,
+                        "tool_args": tool_args
+                    }
+                else:
+                    try:
+                        tool_res = await tool.func(user_context, **tool_args)
+                    except Exception as e:
+                        tool_res = {"status": "error", "message": str(e)}
+                    tools_executed.append({"name": tool_name, "result": tool_res})
+                    content = self._format_tool_result(tool_name, tool_res)
+            else:
+                content = response.get("content", "").strip()
+                if not content:
+                    content = "¡Hola! ¿En qué puedo ayudarte hoy con la gestión de licencias o facultades?"
 
         # Registrar auditoría y guardar respuesta
         ai_audit_logger.log_action(

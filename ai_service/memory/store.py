@@ -117,7 +117,7 @@ class MemoryStore:
             )
             with conn.cursor() as cursor:
                 sql = """
-                    SELECT role, content, metadata, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as created_at
+                    SELECT role, content, metadata, DATE_FORMAT(created_at, '%%Y-%%m-%%d %%H:%%i:%%s') as created_at
                     FROM ai_conversations
                     WHERE user_email = %s
                     ORDER BY id DESC LIMIT %s

@@ -1,4 +1,5 @@
 import os
+import time
 import asyncio
 import hashlib
 import binascii
@@ -205,25 +206,39 @@ async def get_zoom_access_token() -> str:
                 detail=f"Error de red al conectar con Zoom: {str(exc)}"
             )
 
+def _normalize_group_name(name: str) -> str:
+    """Colapsa guiones/guiones bajos/espacios para comparar nombres de forma tolerante
+    (ej: 'UVA-OFICINA-VIRTUAL' debe reconocer 'UVA-OFICINA VIRTUAL')."""
+    import re as _re
+    return _re.sub(r'[\s\-_]+', ' ', name.strip().lower()).strip()
+
 async def get_zoom_group_id_by_name(group_name: str, headers: dict) -> Optional[str]:
     """
-    Busca el ID de un grupo de Zoom a partir de su nombre (insensible a mayúsculas).
+    Busca el ID de un grupo de Zoom a partir de su nombre. Primero intenta coincidencia
+    exacta y, si falla, una coincidencia tolerante a diferencias de guion/espacio.
     """
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get("https://api.zoom.us/v2/groups", headers=headers)
         if response.status_code == 200:
             groups = response.json().get("groups", [])
+            target_exact = group_name.strip().lower()
             for g in groups:
-                if g.get("name", "").strip().lower() == group_name.strip().lower():
+                if g.get("name", "").strip().lower() == target_exact:
+                    return g.get("id")
+
+            target_norm = _normalize_group_name(group_name)
+            for g in groups:
+                if _normalize_group_name(g.get("name", "")) == target_norm:
                     return g.get("id")
     return None
 
-async def get_zoom_group_name_by_id(group_id: str, headers: dict) -> str:
+async def get_zoom_group_name_by_id(group_id: str, headers: dict) -> Optional[str]:
     """
-    Busca el nombre de un grupo de Zoom a partir de su ID.
+    Busca el nombre de un grupo de Zoom a partir de su ID. Devuelve None si no hay
+    group_id o no se pudo resolver (nunca debe inventar un nombre de grupo).
     """
     if not group_id:
-        return "FCCTP"
+        return None
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(f"https://api.zoom.us/v2/groups/{group_id}", headers=headers)
         if response.status_code == 200:
@@ -254,6 +269,50 @@ async def check_available_licenses(client: httpx.AsyncClient, headers: dict) -> 
     except Exception:
         pass
     return True
+
+_ACTIVE_USERS_CACHE = {"users": None, "fetched_at": 0.0}
+_ACTIVE_USERS_CACHE_TTL = 180  # segundos
+_active_users_lock = asyncio.Lock()
+
+async def fetch_active_users(client: httpx.AsyncClient, headers: dict, max_pages: int = 40) -> list:
+    """
+    Obtiene usuarios ACTIVOS de Zoom (paginado). Zoom no soporta búsqueda por nombre en su API,
+    así que para encontrar un usuario activo por nombre hay que recorrer el listado completo
+    (~30s para 8000+ usuarios). Se cachea en memoria por unos minutos para que búsquedas
+    consecutivas no repitan el recorrido completo.
+    """
+    now = time.time()
+    if _ACTIVE_USERS_CACHE["users"] is not None and (now - _ACTIVE_USERS_CACHE["fetched_at"]) < _ACTIVE_USERS_CACHE_TTL:
+        return _ACTIVE_USERS_CACHE["users"]
+
+    async with _active_users_lock:
+        # Puede que otra tarea ya haya refrescado el caché mientras esperábamos el lock
+        now = time.time()
+        if _ACTIVE_USERS_CACHE["users"] is not None and (now - _ACTIVE_USERS_CACHE["fetched_at"]) < _ACTIVE_USERS_CACHE_TTL:
+            return _ACTIVE_USERS_CACHE["users"]
+
+        users = []
+        next_page_token = ""
+        pages = 0
+        while pages < max_pages:
+            url = "https://api.zoom.us/v2/users?status=active&page_size=300"
+            if next_page_token:
+                url += f"&next_page_token={next_page_token}"
+
+            res = await client.get(url, headers=headers)
+            if res.status_code != 200:
+                break
+
+            data = res.json()
+            users.extend(data.get("users", []))
+            pages += 1
+            next_page_token = data.get("next_page_token")
+            if not next_page_token:
+                break
+
+        _ACTIVE_USERS_CACHE["users"] = users
+        _ACTIVE_USERS_CACHE["fetched_at"] = time.time()
+        return users
 
 async def fetch_pending_users_with_groups(client: httpx.AsyncClient, headers: dict) -> list:
     """
@@ -300,7 +359,7 @@ async def fetch_pending_users_with_groups(client: httpx.AsyncClient, headers: di
             )
             with conn.cursor() as cursor:
                 sql = """
-                    SELECT l.target_email, l.details, l.operator_email, DATE_FORMAT(l.created_at, '%d %b %Y') as date
+                    SELECT l.target_email, l.details, l.operator_email, DATE_FORMAT(l.created_at, '%%d %%b %%Y') as date
                     FROM zoom_activity_logs l
                     INNER JOIN (
                         SELECT target_email, MAX(created_at) as max_date
@@ -1940,7 +1999,7 @@ async def create_and_assign_user(
             
     license_name = "Licensed (Zoom Meetings)" if user_type == 2 else "Basic (Sin licencia)"
     
-    group_name = await get_zoom_group_name_by_id(selected_group_id, headers)
+    group_name = await get_zoom_group_name_by_id(selected_group_id, headers) or "(sin grupo)"
     action_type = "ACTUALIZAR" if already_exists else "CREAR"
     details_str = f"Asignada licencia: {license_name}. Agregado al grupo: {group_name}."
     
@@ -2174,22 +2233,22 @@ async def list_activity_logs(current_user: str = Depends(verify_admin), db=Depen
                 # Si tenemos correos de grupo, los incluimos en la consulta
                 if group_emails:
                     query = """
-                        SELECT operator_email, action_type, target_email, details, 
-                               DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as date 
-                        FROM zoom_activity_logs 
-                        WHERE operator_email = %s 
-                           OR target_email IN %s 
-                           OR details LIKE %s 
+                        SELECT operator_email, action_type, target_email, details,
+                               DATE_FORMAT(created_at, '%%Y-%%m-%%d %%H:%%i:%%s') as date
+                        FROM zoom_activity_logs
+                        WHERE operator_email = %s
+                           OR target_email IN %s
+                           OR details LIKE %s
                         ORDER BY created_at DESC LIMIT 500
                     """
                     cursor.execute(query, (current_user, tuple(group_emails), f"%{assigned_group}%"))
                 else:
                     query = """
-                        SELECT operator_email, action_type, target_email, details, 
-                               DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as date 
-                        FROM zoom_activity_logs 
-                        WHERE operator_email = %s 
-                           OR details LIKE %s 
+                        SELECT operator_email, action_type, target_email, details,
+                               DATE_FORMAT(created_at, '%%Y-%%m-%%d %%H:%%i:%%s') as date
+                        FROM zoom_activity_logs
+                        WHERE operator_email = %s
+                           OR details LIKE %s
                         ORDER BY created_at DESC LIMIT 500
                     """
                     cursor.execute(query, (current_user, f"%{assigned_group}%"))

@@ -12,7 +12,9 @@ services:
       - .env
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=qwen2.5-coder:7b
+      - OLLAMA_MODEL=qwen2.5:3b-instruct
+      - OLLAMA_NUM_CTX=8192
+      - OLLAMA_KEEP_ALIVE=30m
     ports:
       - "8000:8000"
     depends_on:
@@ -27,6 +29,15 @@ services:
       - "11434:11434"
     volumes:
       - ollama_storage:/root/.ollama
+    # Requiere NVIDIA Container Toolkit instalado en el host para usar la GPU.
+    # Si no está disponible, comenta este bloque y Ollama usará CPU.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   # 3. Proxy Inverso Nginx para tráfico HTTP/HTTPS en Producción
   nginx:

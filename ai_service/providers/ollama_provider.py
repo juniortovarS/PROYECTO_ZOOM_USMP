@@ -16,7 +16,9 @@ class OllamaProvider(BaseAIProvider):
         model: Optional[str] = None
     ):
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
-        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
+        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:3b-instruct")
+        self.num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "8192"))
+        self.keep_alive = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 
     async def check_health(self) -> Dict[str, Any]:
         """
@@ -73,10 +75,11 @@ class OllamaProvider(BaseAIProvider):
             "model": self.model,
             "messages": formatted_messages,
             "stream": False,
+            "keep_alive": self.keep_alive,
             "options": {
                 "temperature": temperature,
                 "top_p": 0.9,
-                "num_ctx": 2048,
+                "num_ctx": self.num_ctx,
                 "num_predict": 512
             }
         }
