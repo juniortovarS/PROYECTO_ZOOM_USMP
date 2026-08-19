@@ -147,7 +147,7 @@ async def get_users(context: Dict[str, Any], query: Optional[str] = None, group_
                 "status": "success",
                 "total_pending_found": 1,
                 "users_sample": [{
-                    "email": u.get("email"),
+                    "email": u.get("email") or target,
                     "first_name": u.get("first_name", ""),
                     "last_name": u.get("last_name", ""),
                     "license_status": type_map.get(u.get("type"), "Desconocido"),

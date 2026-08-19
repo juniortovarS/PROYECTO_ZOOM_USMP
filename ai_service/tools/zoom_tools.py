@@ -125,3 +125,74 @@ async def remove_group_licenses_mass(context: Dict[str, Any], group_name: str) -
         return {"status": "error", "message": str(e)}
     finally:
         conn.close()
+
+@registry.register(
+    name="remove_user_license",
+    description="Quita la licencia de Zoom Meetings a UN usuario puntual (lo pasa a Basic, sin licencia). Usar cuando piden remover/quitar/eliminar la licencia de UN docente específico, no de toda una facultad (para eso existe remove_group_licenses_mass).",
+    parameters={
+        "type": "object",
+        "properties": {
+            "email": {"type": "string", "description": "Correo electrónico del usuario al que se le quitará la licencia"}
+        },
+        "required": ["email"]
+    },
+    required_role="user",
+    requires_confirmation=True,
+    confirmation_message="¿Confirmas quitar la licencia de Zoom Meetings (Licensed) al usuario '{email}' y dejarlo en Basic (sin licencia)?"
+)
+async def remove_user_license(context: Dict[str, Any], email: str) -> Dict[str, Any]:
+    assigned_group = context.get("assigned_group")
+    is_super_admin = context.get("is_super_admin", False)
+
+    token = await get_zoom_access_token()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    target = email.strip().lower()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        res = await client.get(f"https://api.zoom.us/v2/users/{target}", headers=headers)
+        if res.status_code != 200:
+            return {"status": "error", "message": f"No se encontró un usuario activo con el correo '{target}' en Zoom."}
+
+        u = res.json()
+
+        if not is_super_admin and assigned_group:
+            restricted_id = await get_zoom_group_id_by_name(assigned_group, headers)
+            if not restricted_id or restricted_id not in u.get("group_ids", []):
+                return {
+                    "status": "error",
+                    "message": f"Acceso denegado: Este usuario no pertenece a tu facultad '{assigned_group}'."
+                }
+
+        if u.get("type") != 2:
+            return {
+                "status": "success",
+                "email": target,
+                "message": f"El usuario '{target}' ya estaba en Basic (no tenía licencia Licensed asignada)."
+            }
+
+        if u.get("status") == "pending":
+            return {
+                "status": "error",
+                "message": (
+                    f"El usuario '{target}' tiene una invitación PENDIENTE (todavía no aceptó su cuenta en Zoom). "
+                    "Zoom no permite cambiar el tipo de licencia hasta que la acepte. "
+                    "Si quieres liberar ese cupo de licencia de todas formas, lo que corresponde es CANCELAR la "
+                    "invitación pendiente (dime si quieres que agregue esa función) en vez de bajarle el tipo."
+                )
+            }
+
+        # Zoom acepta correo o ID para GET, pero PATCH requiere el ID interno del usuario
+        user_id = u.get("id") or target
+        patch_res = await client.patch(
+            f"https://api.zoom.us/v2/users/{user_id}",
+            headers=headers,
+            json={"type": 1}
+        )
+        if patch_res.status_code not in (200, 204):
+            return {"status": "error", "message": f"Error de Zoom al quitar la licencia: {patch_res.text}"}
+
+    return {
+        "status": "success",
+        "email": target,
+        "message": f"Se quitó la licencia Licensed al usuario '{target}' (ahora está en Basic)."
+    }

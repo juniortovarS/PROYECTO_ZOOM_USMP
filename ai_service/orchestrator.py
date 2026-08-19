@@ -25,8 +25,26 @@ class AgentOrchestrator:
         "el", "la", "los", "las", "un", "una", "al", "de", "del", "con", "nombre", "llamado", "llamada",
         "usuario", "usuarios", "puedes", "podrias", "podrías", "puedo", "podemos", "ayudar", "ayudarme",
         "buscar", "busca", "encontrar", "encuentra", "existe", "hay", "algun", "algún", "alguna",
-        "a", "me", "mi", "es", "que", "por", "favor", "quisiera", "quiero", "necesito", "tiene", "si"
+        "a", "me", "mi", "es", "que", "por", "favor", "quisiera", "quiero", "necesito", "tiene", "si",
+        # Palabras del lenguaje de la CONSULTA en sí (estado/grupo/licencia/etc.), no del nombre
+        # de la persona — sin esto, "quiero ver el estado de un usuario" (sin decir cuál) buscaba
+        # literalmente "ver estado" en vez de pedir aclaración.
+        "ver", "estado", "status", "grupo", "licencia", "correo", "email", "cuenta",
+        "informacion", "información", "datos", "detalles", "saber", "dime", "decir", "decirme",
+        "dar", "dame", "darme", "das", "puedas", "podrías", "podrias", "mostrar", "mostrarme",
+        "indicar", "indicame", "indícame", "brindar", "brindame", "brindarme",
+        # Sustantivos genéricos de rol (no son el nombre de nadie en particular) — sin esto,
+        # "el estado de un docente" (sin decir cuál) terminaba buscando literalmente "docente".
+        "docente", "docentes", "profesor", "profesora", "profesores", "maestro", "maestra",
+        "alumno", "alumna", "estudiante", "persona", "administrador", "admin"
     }
+
+    def _ask_for_email(self, last_assistant_text: str, first_prompt: str, repeat_prompt: str) -> str:
+        """Evita repetir el mismo mensaje textual dos veces seguidas cuando el usuario
+        no respondió con un correo la primera vez que se le pidió."""
+        if "correo del docente" in last_assistant_text or "correo que quieres" in last_assistant_text:
+            return repeat_prompt
+        return first_prompt
 
     def _extract_search_query(self, message: str) -> str:
         """Extrae el nombre a buscar de un mensaje tipo 'hay un usuario con nombre Pablo Casma?',
@@ -89,12 +107,15 @@ class AgentOrchestrator:
             users = result.get("users_sample", [])
             if not users:
                 return "No se encontraron usuarios que coincidan con tu búsqueda (ni activos ni con invitación pendiente)."
+            status_map = {"active": "✅ Activo", "pending": "⏳ Pendiente de aceptar la invitación", "inactive": "⛔ Inactivo"}
             lines = ["👤 **Usuarios encontrados**:\n"]
             for u in users[:15]:
                 grupo = (u.get("groups") or ["N/A"])[0]
                 licencia = u.get("license_status")
                 extra = f" — Licencia: **{licencia}**" if licencia else ""
-                lines.append(f"- **{u.get('email')}** — {u.get('first_name', '')} {u.get('last_name', '')} (Grupo: {grupo}){extra}")
+                estado = u.get("account_status") or u.get("status")
+                extra_estado = f" — Estado: **{status_map.get(estado, estado)}**" if estado else ""
+                lines.append(f"- **{u.get('email')}** — {u.get('first_name', '')} {u.get('last_name', '')} (Grupo: {grupo}){extra}{extra_estado}")
             return "\n".join(lines)
 
         if tool_name == "get_audit_logs":
@@ -159,9 +180,12 @@ REPORTE DE FORMATO:
 
         # Recuperar últimos mensajes para memoria conversacional
         history = memory_store.get_chat_history(user_email, limit=6)
-        history_text = " ".join([h.get("content", "") for h in history]).lower()
+        # Solo mensajes del USUARIO — el saludo del propio asistente puede mencionar el correo
+        # del admin logueado ("Hola jtovar@usmpvirtual.edu.pe, ...") y si se incluyeran los
+        # mensajes del asistente aquí, ese correo se confundía con el que el usuario preguntó.
+        history_text = " ".join([h.get("content", "") for h in history if h.get("role") == "user"]).lower()
 
-        # Extraer posibles correos en el mensaje actual o historial
+        # Extraer posibles correos en el mensaje actual o historial (solo lo que el usuario escribió)
         emails_in_msg = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', message)
         emails_in_history = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', history_text)
         active_email = emails_in_msg[0] if emails_in_msg else (emails_in_history[-1] if emails_in_history else None)
@@ -172,9 +196,28 @@ REPORTE DE FORMATO:
             "saber si", "quiero saber", "sabes si", "dime si", "me puedes decir",
             "puedes decirme", "puedes confirmar", "me confirmas", "confirmar si",
             "cuál es el estado", "cual es el estado", "está activ", "esta activ",
-            "tiene o no", "tiene licencia", "cuenta con licencia", "cuenta con una licencia"
+            "tiene o no", "tiene licencia", "cuenta con licencia", "cuenta con una licencia",
+            "status", "ver el status", "el status", "ver status"
         )
-        is_query_intent = any(q in msg_lower for q in QUERY_INTENT_MARKERS)
+        # "tiene"+"licencia" y preguntas que arrancan con qué/cuál se detectan por PALABRAS
+        # presentes, sin importar el orden — una frase fija como "tiene licencia" no calza con
+        # "licencia tiene" ni "qué licencia tiene", y ese tipo de reordenamiento es habitual en
+        # español. Ver la nota de [[lista blanca]] más abajo: mismo motivo, mismo patrón de bug.
+        has_tiene_and_licencia = ("tiene" in msg_lower and "licencia" in msg_lower)
+        starts_as_question = re.match(r'^\s*(que|qué|cual|cuál|cuales|cuáles)\b', msg_lower) is not None
+        is_query_intent = (
+            any(q in msg_lower for q in QUERY_INTENT_MARKERS)
+            or has_tiene_and_licencia
+            or (starts_as_question and "licencia" in msg_lower)
+        )
+
+        # Intención de QUITAR licencia a un usuario puntual (opuesto a agregar/crear — antes
+        # "licencia" sola mandaba todo al flujo de creación sin importar el verbo)
+        REMOVE_LICENSE_MARKERS = (
+            "quitar", "quítale", "quitale", "remover", "remueve", "remuévele", "remuevele",
+            "eliminar", "elimina", "sacar", "sácale", "sacale", "retirar", "retírale", "retirale"
+        )
+        is_remove_intent = any(m in msg_lower for m in REMOVE_LICENSE_MARKERS)
 
         # Intención explícita de BUSCAR un usuario puntual: se enruta directo a la herramienta
         # get_users (sin pasar por el juicio del modelo) porque un modelo de 3B, unos turnos
@@ -187,6 +230,29 @@ REPORTE DE FORMATO:
             "existe un usuario", "existe el usuario", "hay un usuario", "hay algun usuario", "hay algún usuario"
         )
         is_search_user_intent = any(m in msg_lower for m in SEARCH_USER_MARKERS)
+
+        # Preguntas de seguimiento tipo "¿y en qué grupo está?" / "quiero ver su estado" que no
+        # repiten el correo (se refieren al usuario del que se venía hablando). El modelo de 3B
+        # tiende a divagar sobre parámetros de herramientas en vez de simplemente re-consultar
+        # get_users con el correo activo — así que esto también se resuelve determinísticamente.
+        GROUP_STATUS_FOLLOWUP_MARKERS = (
+            "que grupo", "qué grupo", "en que grupo", "en qué grupo", "su grupo", "el grupo",
+        )
+        # "estado" se detecta como palabra completa (no frase fija) porque el artículo varía
+        # mucho en español ("el estado", "un estado", "su estado", "estado de...") y una lista
+        # de frases exactas siempre deja huecos — como pasó con "dame un estado de un correo",
+        # que al no calzar con ninguna frase cayó al LLM, y sin ningún correo real en la
+        # conversación el modelo usó uno mencionado en la base de conocimiento interna (RAG)
+        # como si fuera el que se preguntó. Ver [[bug de RAG hallucination]].
+        has_estado_word = re.search(r'\bestado\b', msg_lower) is not None
+        is_group_status_followup = has_estado_word or any(m in msg_lower for m in GROUP_STATUS_FOLLOWUP_MARKERS)
+
+        # Nota de diseño: para "¿el último mensaje del asistente pedía el correo para CREAR
+        # un usuario?" usamos una LISTA BLANCA (¿fue literalmente nuestra plantilla fija del
+        # caso 6?) en vez de una lista negra de "frases que no son de creación" — el modelo
+        # puede redactar su propia pregunta de mil formas ("el estado", "el status", "para
+        # eliminarlo", etc.) y una lista negra siempre va a tener huecos. Ver [[caso 2]] abajo.
+        CREATE_FLOW_PROMPT_MARKER = "asignación de licencia zoom"
 
         # Detectar si el ÚLTIMO turno del asistente fue una confirmación de create_zoom_user aún pendiente
         # (evita que un "grupo"/"facultad" mencionado mucho después reviva una confirmación vieja y ya abandonada)
@@ -208,6 +274,8 @@ REPORTE DE FORMATO:
 
         # El asistente venía preguntando algo de tipo consulta (no de creación) en su último turno
         last_assistant_was_query = any(q in last_assistant_text for q in QUERY_INTENT_MARKERS)
+        # Lista blanca: ¿el último turno fue específicamente nuestra plantilla de "pedir correo para crear"?
+        last_assistant_was_create_prompt = CREATE_FLOW_PROMPT_MARKER in last_assistant_text
 
         # --- SMART CONTEXTUAL INTENT ROUTING ---
 
@@ -244,9 +312,9 @@ REPORTE DE FORMATO:
                 "tool_args": tool_args
             }
 
-        # 2. El usuario solo proporcionó un correo electrónico (ej. jtovar@usmpvirtual.edu.pe)
-        #    (pero no si el asistente lo pidió para CONSULTAR, no para crear)
-        elif emails_in_msg and len(message.strip().split()) <= 2 and not last_assistant_was_query:
+        # 2. El usuario solo proporcionó un correo electrónico (ej. jtovar@usmpvirtual.edu.pe),
+        #    justo después de que NOSOTROS (plantilla fija, no el LLM) le pidiéramos el correo para crear
+        elif emails_in_msg and len(message.strip().split()) <= 2 and last_assistant_was_create_prompt:
             target_email = emails_in_msg[0]
             target_group = assigned_group or "UVA"
             
@@ -321,10 +389,16 @@ REPORTE DE FORMATO:
             else:
                 content = "No se encontraron facultades disponibles para tus permisos."
 
-        # 5b. Búsqueda explícita de un usuario puntual (determinístico: nunca delegar esto al LLM)
-        elif is_search_user_intent:
+        # 5b. Búsqueda explícita de un usuario puntual, o pregunta de seguimiento sobre su
+        #     grupo/estado (determinístico: nunca delegar esto al LLM)
+        elif is_search_user_intent or is_group_status_followup:
             from .tools.system_tools import get_users
-            search_query = emails_in_msg[0] if emails_in_msg else self._extract_search_query(message)
+            if emails_in_msg:
+                search_query = emails_in_msg[0]
+            elif is_group_status_followup and active_email:
+                search_query = active_email
+            else:
+                search_query = self._extract_search_query(message)
 
             if search_query:
                 tool_res = await get_users(user_context, query=search_query)
@@ -333,11 +407,61 @@ REPORTE DE FORMATO:
             else:
                 content = "¿Qué usuario deseas buscar? Indícame su nombre completo o correo."
 
-        # 6. Solicitud de Agregar Licencia / Usuario con correo explícito (no confundir con una consulta/validación)
-        elif not is_query_intent and ("agregar" in msg_lower or "crear" in msg_lower or "invitar" in msg_lower or "licencia" in msg_lower):
-            if emails_in_msg:
-                target_email = emails_in_msg[0]
-                
+        # 5c. Quitar licencia a UN usuario puntual (distinto de agregar/crear - antes ambos caían en el mismo flujo)
+        elif not is_query_intent and is_remove_intent and "licencia" in msg_lower:
+            target_email = active_email
+            if target_email:
+                if pending_creation:
+                    PENDING_CONFIRMATIONS.pop(pending_creation[0], None)
+
+                tool_args = {"email": target_email}
+                action_id = str(uuid.uuid4())[:8]
+                conf_msg = f"¿Confirmas quitar la licencia de Zoom Meetings (Licensed) al usuario '{target_email}' y dejarlo en Basic (sin licencia)?"
+
+                PENDING_CONFIRMATIONS[action_id] = {
+                    "tool_name": "remove_user_license",
+                    "tool_args": tool_args,
+                    "user_context": user_context,
+                    "user_email": user_email,
+                    "created_at": time.time()
+                }
+
+                prompt_resp = f"⚠️ **Confirmación requerida**\n\n{conf_msg}"
+                memory_store.save_chat_message(conversation_id, user_email, "assistant", prompt_resp, metadata={"confirmation_required": True, "action_id": action_id})
+
+                return {
+                    "status": "confirmation_required",
+                    "action_id": action_id,
+                    "message": prompt_resp,
+                    "confirmation_message": conf_msg,
+                    "tool_name": "remove_user_license",
+                    "tool_args": tool_args
+                }
+            else:
+                content = self._ask_for_email(
+                    last_assistant_text,
+                    first_prompt=(
+                        "🗑️ **Quitar Licencia Zoom**:\n\n"
+                        "Por favor indícame el **correo del docente** al que quieres quitarle la licencia."
+                    ),
+                    repeat_prompt="Sigo necesitando el correo del docente para poder quitarle la licencia — ¿me lo compartes?"
+                )
+
+        # 5d. Listado de usuarios PENDIENTES en general (no de un usuario puntual). Se detecta por
+        #     palabras presentes ("pendient..." + "usuario/correo/invitación"), no por frase fija,
+        #     y va ANTES del caso 6 para que "licencia" no lo desvíe al flujo de crear usuario.
+        elif not emails_in_msg and re.search(r'\bpendient', msg_lower) and re.search(r'\b(usuario|usuarios|correo|correos|invitacion|invitaciones|invitación)\b', msg_lower):
+            from .tools.system_tools import get_users
+            tool_res = await get_users(user_context, status="pending")
+            tools_executed.append({"name": "get_users", "result": tool_res})
+            content = self._format_tool_result("get_users", tool_res)
+
+        # 6. Solicitud de Agregar Licencia / Usuario (no confundir con una consulta/validación).
+        #    Usa active_email (correo mencionado recientemente) si el mensaje actual no trae uno
+        #    explícito — ej. "ponle la licencia zoom meetings" justo después de hablar de alguien.
+        elif not is_query_intent and not is_remove_intent and ("agregar" in msg_lower or "crear" in msg_lower or "invitar" in msg_lower or "licencia" in msg_lower):
+            target_email = emails_in_msg[0] if emails_in_msg else active_email
+            if target_email:
                 # Detectar si especificó facultad en el mensaje (por keyword, o como palabra en mayúsculas)
                 target_group = self._extract_group_name(message)
                 if not target_group:
@@ -370,10 +494,14 @@ REPORTE DE FORMATO:
                     "tool_args": tool_args
                 }
             else:
-                content = (
-                    "📝 **Asignación de Licencia Zoom**:\n\n"
-                    "Por favor indícame el **correo del docente** (ej: `docente@usmp.pe`) "
-                    "y la **facultad/grupo** a la que pertenece (ej: `UVA`, `FCCTP`, `FMH`)."
+                content = self._ask_for_email(
+                    last_assistant_text,
+                    first_prompt=(
+                        "📝 **Asignación de Licencia Zoom**:\n\n"
+                        "Por favor indícame el **correo del docente** (ej: `docente@usmp.pe`) "
+                        "y la **facultad/grupo** a la que pertenece (ej: `UVA`, `FCCTP`, `FMH`)."
+                    ),
+                    repeat_prompt="Sigo necesitando el correo del docente para continuar — ¿me lo compartes?"
                 )
 
         # 7. Conversaciones o preguntas abiertas -> Pasar a Ollama con respuesta limpia y directa
@@ -457,13 +585,28 @@ REPORTE DE FORMATO:
             status="SUCCESS"
         )
 
-        memory_store.save_chat_message(conversation_id, user_email, "assistant", content, metadata={"tools_executed": [t["name"] for t in tools_executed]})
+        # Si se encontró un usuario puntual vía get_users, se lo señalamos al frontend para que
+        # filtre/muestre ese mismo usuario en el panel principal (tabla de Usuarios), no solo en
+        # el chat — así al minimizar el chat ya aparece resaltado en el sistema.
+        highlight_email = None
+        for t in tools_executed:
+            if t.get("name") == "get_users":
+                users = (t.get("result") or {}).get("users_sample") or []
+                if users and users[0].get("email"):
+                    highlight_email = users[0]["email"]
+                    break
+
+        if highlight_email:
+            content += f"\n\n🖥️ También lo dejé filtrado en tu panel de Usuarios — minimiza el chat para verlo."
+
+        memory_store.save_chat_message(conversation_id, user_email, "assistant", content, metadata={"tools_executed": [t["name"] for t in tools_executed], "highlight_email": highlight_email})
 
         exec_ms = int((time.time() - start_time) * 1000)
         return {
             "status": "success",
             "message": content,
             "tools_executed": tools_executed,
+            "highlight_email": highlight_email,
             "execution_time_ms": exec_ms
         }
 
@@ -519,7 +662,10 @@ REPORTE DE FORMATO:
                 execution_time_ms=t_ms
             )
 
-            resp_msg = f"✅ **Operación ejecutada con éxito**\n\nHerramienta: `{tool_name}`\nResultado: `{res}`"
+            friendly_msg = None
+            if isinstance(res, dict):
+                friendly_msg = res.get("message") or (res.get("result") or {}).get("message")
+            resp_msg = f"✅ **Operación completada**\n\n{friendly_msg}" if friendly_msg else f"✅ **Operación ejecutada con éxito**\n\nHerramienta: `{tool_name}`\nResultado: `{res}`"
             memory_store.save_chat_message(f"conv_{user_email}", user_email, "assistant", resp_msg)
             
             return {

@@ -24,5 +24,9 @@ COPY . .
 # Exponer el puerto del servidor FastAPI
 EXPOSE 8000
 
-# Comando para iniciar FastAPI en producción
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Un solo worker: el orquestador de IA guarda las confirmaciones pendientes (PENDING_CONFIRMATIONS)
+# y el caché de usuarios activos en memoria del proceso. Con --workers > 1, cada proceso tiene su
+# propia copia y el botón "Confirmar y Ejecutar" falla con "la acción no existe" si la petición cae
+# en un worker distinto al que creó la confirmación. FastAPI es async, así que un solo proceso
+# puede atender muchas peticiones I/O-bound (Zoom/Ollama/MySQL) concurrentemente sin problema.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

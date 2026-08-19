@@ -478,6 +478,7 @@
         let tokenHistory = []; 
         let totalRecords = 0;
         let isSearching = false;
+        let searchRequestId = 0; // evita que una búsqueda vieja (ej. la del refresco en segundo plano) pise una más nueva
         let showOnlyLicensed = false;
         let globalLicensedCount = 0;
 
@@ -499,6 +500,12 @@
                     document.getElementById('tabs-container')?.classList.add('hidden');
                 }
                 refreshDashboard();
+
+                // Precargar el historial del chat de IA al entrar/recargar la página, para que
+                // ya esté listo (sin esperar a que el usuario abra el popup o mande un mensaje,
+                // que antes causaba una carga tardía que parecía "perder" el contexto).
+                checkAIHealth();
+                loadAIChatHistory();
             }
 
             // Configurar botones de paginación
@@ -855,6 +862,7 @@
         async function handleSearch() {
             const query = document.getElementById('search-input').value.trim();
             const countLabel = document.getElementById('user-count-label');
+            const myRequestId = ++searchRequestId;
 
             if (!query) {
                 isSearching = false;
@@ -889,6 +897,11 @@
                 }
                 const response = await fetch(url);
                 const data = await response.json();
+
+                // Si mientras esperábamos esta respuesta se lanzó una búsqueda más nueva
+                // (ej. el usuario preguntó por otra persona), esta respuesta ya es vieja —
+                // se descarta para no pisar el resultado más reciente.
+                if (myRequestId !== searchRequestId) return;
 
                 if (response.ok && data.status === 'success') {
                     if (data.users && data.users.length > 0) {
@@ -1632,9 +1645,28 @@
             }
         }
 
+        function highlightUserInSystemPanel(email) {
+            try {
+                switchTab('dashboard');
+                const searchInput = document.getElementById('search-input');
+                if (searchInput) {
+                    searchInput.value = email;
+                    handleSearch();
+                }
+            } catch (e) {}
+        }
+
         function triggerLiveBackgroundRefresh() {
             try {
-                fetchUsers();
+                // Si hay un filtro/búsqueda activa (ej. el usuario que el chat acaba de mostrar),
+                // hay que re-aplicarlo en vez de listar TODOS los usuarios — si no, esta
+                // actualización en segundo plano termina pisando el filtro cuando responde
+                // (fetchUsers() puede tardar varios segundos con muchos usuarios).
+                if (isSearching) {
+                    handleSearch();
+                } else {
+                    fetchUsers();
+                }
                 fetchLicenses();
                 fetchGroups();
             } catch (e) {}
@@ -1806,11 +1838,19 @@
                         <span class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
                         <span class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
                     </span>
-                    <span>Analizando consulta y verificando sistema...</span>
+                    <span id="ai-typing-text">Pensando...</span>
                 </div>
             `;
             container.appendChild(loadingDiv);
             container.scrollTop = container.scrollHeight;
+
+            const typingMessages = ['Pensando...', 'Analizando tu solicitud...', 'Dándote la mejor respuesta...'];
+            let typingMsgIndex = 0;
+            const typingInterval = setInterval(() => {
+                typingMsgIndex = (typingMsgIndex + 1) % typingMessages.length;
+                const typingSpan = document.getElementById('ai-typing-text');
+                if (typingSpan) typingSpan.textContent = typingMessages[typingMsgIndex];
+            }, 1800);
 
             try {
                 const res = await fetch('/api/ai/chat', {
@@ -1819,6 +1859,7 @@
                     body: JSON.stringify({ message: message })
                 });
 
+                clearInterval(typingInterval);
                 document.getElementById('ai-typing-indicator')?.remove();
                 const data = await res.json();
 
@@ -1826,11 +1867,15 @@
                     appendAIConfirmationCard(data.action_id, data.confirmation_message || data.message, data.tool_name);
                 } else if (data.status === 'success') {
                     appendAIMessageBubble('assistant', data.message, { tools_executed: data.tools_executed?.map(t => t.name) });
+                    if (data.highlight_email) {
+                        highlightUserInSystemPanel(data.highlight_email);
+                    }
                     triggerLiveBackgroundRefresh();
                 } else {
                     appendAIMessageBubble('assistant', data.message || 'Ocurrió un inconveniente al procesar la solicitud.');
                 }
             } catch (error) {
+                clearInterval(typingInterval);
                 document.getElementById('ai-typing-indicator')?.remove();
                 appendAIMessageBubble('assistant', 'Error de conexión con el servicio de IA local.');
             } finally {

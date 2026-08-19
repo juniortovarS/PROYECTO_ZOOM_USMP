@@ -1886,38 +1886,95 @@ async def create_and_assign_user(
     already_exists = False
     licensed_assigned = False
     existing_group_ids = []
-    
+    pending_name_change_ignored = False
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         check_response = await client.get(f"https://api.zoom.us/v2/users/{email}", headers=headers)
-        
+
+        create_fresh = False
+
         if check_response.status_code == 200:
             already_exists = True
             user_data = check_response.json()
             user_id = user_data.get("id")
             current_type = user_data.get("type")
             existing_group_ids = user_data.get("group_ids", [])
-            
-            if current_type != user_type:
-                if user_type == 2:
-                    has_lic = await check_available_licenses(client, headers)
-                    if not has_lic:
-                        raise HTTPException(
-                            status_code=400,
-                            detail="No hay licencias disponibles de Zoom Meetings (Licensed). Por favor compre más licencias."
-                        )
-                patch_res = await client.patch(
-                    f"https://api.zoom.us/v2/users/{user_id}",
-                    headers=headers,
-                    json={"type": user_type}
+
+            needs_profile_patch = (current_type != user_type) or (
+                (first_name and first_name != user_data.get("first_name", ""))
+                or (last_name and last_name != user_data.get("last_name", ""))
+            )
+
+            if needs_profile_patch and user_data.get("status") == "pending":
+                # Zoom no permite hacer PATCH al perfil de una invitación pendiente todavía no
+                # aceptada (falla con "user does not exist" aunque el GET sí la encuentre).
+                # En cambio, volver a invitar (acción "create"/"invite") a ese mismo correo SÍ
+                # actualiza el tipo de licencia correctamente — sin necesidad de un DELETE previo,
+                # que además choca con el límite de Zoom de "ya hay una solicitud de desasociar
+                # a este usuario" si se reintenta. El nombre/apellido, en cambio, nunca se guarda
+                # para una cuenta no verificada por más que se reintente: es una restricción de
+                # Zoom (solo se completa cuando la persona acepta e inicia sesión), así que se
+                # avisa en vez de prometer algo que la plataforma no permite.
+                pending_name_change_ignored = bool(
+                    (first_name and first_name != user_data.get("first_name", ""))
+                    or (last_name and last_name != user_data.get("last_name", ""))
                 )
-                if patch_res.status_code not in (200, 204):
-                    raise HTTPException(
-                        status_code=patch_res.status_code,
-                        detail=f"Error de Zoom al actualizar licencia a Tipo {user_type}: {patch_res.json().get('message', patch_res.text)}"
+                already_exists = False
+                existing_group_ids = []
+                create_fresh = True
+            else:
+                if current_type != user_type:
+                    if user_type == 2:
+                        has_lic = await check_available_licenses(client, headers)
+                        if not has_lic:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="No hay licencias disponibles de Zoom Meetings (Licensed). Por favor compre más licencias."
+                            )
+                    patch_res = await client.patch(
+                        f"https://api.zoom.us/v2/users/{user_id}",
+                        headers=headers,
+                        json={"type": user_type}
                     )
-            licensed_assigned = True
-        
+                    if patch_res.status_code not in (200, 204):
+                        raise HTTPException(
+                            status_code=patch_res.status_code,
+                            detail=f"Error de Zoom al actualizar licencia a Tipo {user_type}: {patch_res.json().get('message', patch_res.text)}"
+                        )
+                licensed_assigned = True
+
+                # Actualizar nombre/apellido si vienen datos nuevos (el formulario de edición los manda;
+                # el flujo del asistente de IA normalmente no, así que no se pisa un nombre real con "").
+                name_changed = (
+                    (first_name and first_name != user_data.get("first_name", ""))
+                    or (last_name and last_name != user_data.get("last_name", ""))
+                )
+                if name_changed:
+                    name_payload = {}
+                    if first_name:
+                        name_payload["first_name"] = first_name
+                    if last_name:
+                        name_payload["last_name"] = last_name
+                    name_patch_res = await client.patch(
+                        f"https://api.zoom.us/v2/users/{user_id}",
+                        headers=headers,
+                        json=name_payload
+                    )
+                    if name_patch_res.status_code not in (200, 204):
+                        raise HTTPException(
+                            status_code=name_patch_res.status_code,
+                            detail=f"Error de Zoom al actualizar nombre/apellido: {name_patch_res.json().get('message', name_patch_res.text)}"
+                        )
+
         elif check_response.status_code == 404:
+            create_fresh = True
+        else:
+            raise HTTPException(
+                status_code=check_response.status_code,
+                detail=f"Error de Zoom al verificar existencia del usuario: {check_response.json().get('message', check_response.text)}"
+            )
+
+        if create_fresh:
             if user_type == 2:
                 has_lic = await check_available_licenses(client, headers)
                 if not has_lic:
@@ -1962,12 +2019,7 @@ async def create_and_assign_user(
             else:
                 user_id = create_res.json().get("id")
             licensed_assigned = True
-        else:
-            raise HTTPException(
-                status_code=check_response.status_code,
-                detail=f"Error de Zoom al verificar existencia del usuario: {check_response.json().get('message', check_response.text)}"
-            )
-        
+
         if not selected_group_id:
             selected_group_id = await get_or_create_default_group_id(headers)
         
@@ -2024,13 +2076,20 @@ async def create_and_assign_user(
             
     await asyncio.to_thread(log_db, current_user, action_type, email, details_str)
 
+    success_message = f"Usuario {'actualizado' if already_exists else 'invitado/creado'} con licencia {license_name} y asignado al grupo con éxito."
+    if pending_name_change_ignored:
+        success_message += (
+            " Nota: el tipo de licencia y grupo sí se actualizaron, pero Zoom no permite guardar el "
+            "nombre/apellido hasta que el usuario acepte su invitación e inicie sesión por primera vez."
+        )
+
     return {
         "status": "success",
         "email": email,
         "already_exists": already_exists,
         "license_assigned": licensed_assigned,
         "group_assigned": group_added,
-        "message": f"Usuario {'actualizado' if already_exists else 'invitado/creado'} con licencia {license_name} y asignado al grupo con éxito."
+        "message": success_message
     }
 
 # ----------------- ENDPOINTS DE AUTENTICACIÓN -----------------
