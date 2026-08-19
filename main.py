@@ -1504,6 +1504,38 @@ async def import_users_csv(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno al importar archivo CSV: {str(e)}")
 
+@app.get("/api/users/pending")
+async def list_pending_users(
+    current_user: str = Depends(verify_session),
+    db=Depends(get_db_conn)
+):
+    """
+    Lista completa de usuarios con invitación PENDIENTE (aún no aceptada) en Zoom,
+    junto con la facultad/grupo a la que fueron invitados. Respeta el scoping por
+    facultad de los administradores no-globales.
+    """
+    try:
+        user_record = get_user_by_email(current_user, db)
+        assigned_group = user_record.get("assigned_group") if user_record else None
+
+        token = await get_zoom_access_token()
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            all_pending = await fetch_pending_users_with_groups(client, headers)
+
+        if assigned_group:
+            all_pending = [
+                u for u in all_pending
+                if u.get("groups") and u.get("groups")[0].strip().lower() == assigned_group.strip().lower()
+            ]
+
+        return {"status": "success", "pending_users": all_pending, "total_pending": len(all_pending)}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al listar usuarios pendientes: {str(e)}")
+
 @app.get("/api/users/search")
 async def search_zoom_user(
     q: Optional[str] = Query(None),

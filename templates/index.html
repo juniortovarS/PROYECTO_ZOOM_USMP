@@ -138,7 +138,7 @@
                 </div>
             </div>
             <!-- Stat 3: Pending Users (Total global Zoom portal) -->
-            <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center justify-between transition-all duration-300 hover:shadow-md">
+            <div onclick="openPendingUsersModal()" title="Ver el detalle de usuarios pendientes" class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center justify-between transition-all duration-300 hover:shadow-md hover:border-amber-200 cursor-pointer active:scale-[0.98]">
                 <div>
                     <p id="stat-pending-label" class="text-xs font-bold text-amber-500 uppercase tracking-wider">Pendientes (Total Zoom)</p>
                     <h3 id="stat-pending" class="text-3xl font-bold text-slate-800 mt-1">0</h3>
@@ -1870,6 +1870,9 @@
                     if (data.highlight_email) {
                         highlightUserInSystemPanel(data.highlight_email);
                     }
+                    if (data.open_pending_modal) {
+                        openPendingUsersModal();
+                    }
                     triggerLiveBackgroundRefresh();
                 } else {
                     appendAIMessageBubble('assistant', data.message || 'Ocurrió un inconveniente al procesar la solicitud.');
@@ -2204,7 +2207,73 @@
         function closeCsvResultModal() {
             const modal = document.getElementById('csv-result-modal');
             const content = document.getElementById('csv-result-modal-content');
-            
+
+            content.classList.remove('scale-100', 'opacity-100');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.remove('flex');
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        async function openPendingUsersModal() {
+            const modal = document.getElementById('pending-users-modal');
+            const content = document.getElementById('pending-users-modal-content');
+            const listEl = document.getElementById('pending-users-list');
+            const subtitleEl = document.getElementById('pending-users-subtitle');
+
+            listEl.innerHTML = `<div class="flex items-center justify-center py-10 text-sm text-slate-400 font-semibold animate-pulse">Cargando usuarios pendientes...</div>`;
+            subtitleEl.innerText = "Cargando...";
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            }, 10);
+
+            try {
+                const res = await fetch('/api/users/pending');
+                const data = await res.json();
+
+                if (!res.ok || data.status !== 'success') {
+                    listEl.innerHTML = `<div class="text-center py-10 text-sm text-rose-500 font-semibold">${data.detail || 'Error al cargar usuarios pendientes'}</div>`;
+                    subtitleEl.innerText = "Error";
+                    return;
+                }
+
+                const users = data.pending_users || [];
+                subtitleEl.innerText = `${data.total_pending} correo${data.total_pending === 1 ? '' : 's'} esperando aceptar su invitación`;
+
+                if (users.length === 0) {
+                    listEl.innerHTML = `<div class="text-center py-10 text-sm text-slate-400 font-semibold">🎉 No hay ninguna invitación pendiente ahora mismo.</div>`;
+                    return;
+                }
+
+                listEl.innerHTML = users.map(u => {
+                    const email = u.email || 'Correo desconocido';
+                    const group = (u.groups && u.groups.length > 0) ? u.groups[0] : 'Sin grupo';
+                    const name = [u.first_name, u.last_name].filter(Boolean).join(' ');
+                    return `
+                        <div class="flex items-center justify-between p-3 bg-amber-50/50 border border-amber-100 rounded-xl">
+                            <div class="min-w-0">
+                                <p class="text-sm font-bold text-slate-800 truncate">${escapeHtml(email)}</p>
+                                ${name ? `<p class="text-xs text-slate-500 font-medium truncate">${escapeHtml(name)}</p>` : ''}
+                            </div>
+                            <span class="flex-shrink-0 ml-3 px-2.5 py-1 bg-amber-100 text-amber-700 text-[10px] font-extrabold uppercase rounded-lg">${escapeHtml(group)}</span>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                listEl.innerHTML = `<div class="text-center py-10 text-sm text-rose-500 font-semibold">Error de conexión al cargar usuarios pendientes</div>`;
+                subtitleEl.innerText = "Error";
+            }
+        }
+
+        function closePendingUsersModal() {
+            const modal = document.getElementById('pending-users-modal');
+            const content = document.getElementById('pending-users-modal-content');
+
             content.classList.remove('scale-100', 'opacity-100');
             content.classList.add('scale-95', 'opacity-0');
             setTimeout(() => {
@@ -2283,6 +2352,36 @@
             
             <div class="flex justify-end pt-4 border-t border-slate-100 mt-4">
                  <button onclick="closeCsvResultModal()" class="px-5 py-2.5 bg-[#2D8CFF] hover:bg-[#1A56DB] text-white font-bold rounded-xl text-xs transition-all duration-200">
+                     Entendido
+                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Usuarios Pendientes -->
+    <div id="pending-users-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 transform transition-all duration-300 scale-95 opacity-0 max-h-[85vh] flex flex-col" id="pending-users-modal-content">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <div class="flex items-center space-x-3">
+                    <span class="p-2 bg-amber-50 text-amber-500 rounded-lg">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </span>
+                    <div>
+                        <h3 class="text-base font-extrabold text-slate-800">Usuarios Pendientes</h3>
+                        <p id="pending-users-subtitle" class="text-xs text-slate-400 font-semibold">Cargando...</p>
+                    </div>
+                </div>
+                <button onclick="closePendingUsersModal()" class="text-slate-400 hover:text-slate-600 focus:outline-none">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <div id="pending-users-list" class="space-y-2 flex-grow overflow-y-auto pr-1">
+                <div class="flex items-center justify-center py-10 text-sm text-slate-400 font-semibold animate-pulse">Cargando usuarios pendientes...</div>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-slate-100 mt-4">
+                 <button onclick="closePendingUsersModal()" class="px-5 py-2.5 bg-[#2D8CFF] hover:bg-[#1A56DB] text-white font-bold rounded-xl text-xs transition-all duration-200">
                      Entendido
                  </button>
             </div>

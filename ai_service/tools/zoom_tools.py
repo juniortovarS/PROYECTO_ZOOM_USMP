@@ -196,3 +196,63 @@ async def remove_user_license(context: Dict[str, Any], email: str) -> Dict[str, 
         "email": target,
         "message": f"Se quitó la licencia Licensed al usuario '{target}' (ahora está en Basic)."
     }
+
+@registry.register(
+    name="change_user_group",
+    description="Cambia a un usuario existente de facultad/grupo, SIN tocar su licencia actual. Usar cuando piden mover/cambiar/asignar a alguien a otro grupo/facultad sin mencionar la licencia.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "email": {"type": "string", "description": "Correo del usuario a mover de grupo"},
+            "group_name": {"type": "string", "description": "Nombre de la facultad/grupo destino"}
+        },
+        "required": ["email", "group_name"]
+    },
+    required_role="user",
+    requires_confirmation=True,
+    confirmation_message="¿Confirmas mover al usuario '{email}' a la facultad '{group_name}'? (su licencia actual no cambia)"
+)
+async def change_user_group(context: Dict[str, Any], email: str, group_name: str) -> Dict[str, Any]:
+    assigned_group = context.get("assigned_group")
+    is_super_admin = context.get("is_super_admin", False)
+
+    if not is_super_admin and assigned_group and group_name.strip().lower() != assigned_group.strip().lower():
+        return {
+            "status": "error",
+            "message": f"Acceso denegado: Solo puedes gestionar tu facultad '{assigned_group}'."
+        }
+
+    token = await get_zoom_access_token()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    target = email.strip().lower()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        res = await client.get(f"https://api.zoom.us/v2/users/{target}", headers=headers)
+        if res.status_code != 200:
+            return {"status": "error", "message": f"No se encontró un usuario activo con el correo '{target}' en Zoom."}
+
+        u = res.json()
+        existing_group_ids = u.get("group_ids", [])
+        user_id = u.get("id") or target
+
+        new_group_id = await get_zoom_group_id_by_name(group_name, headers)
+        if not new_group_id:
+            return {"status": "error", "message": f"No se encontró el grupo de Zoom con nombre '{group_name}'."}
+
+        for old_gid in existing_group_ids:
+            if old_gid and old_gid != new_group_id:
+                await client.delete(f"https://api.zoom.us/v2/groups/{old_gid}/members/{user_id}", headers=headers)
+
+        group_res = await client.post(
+            f"https://api.zoom.us/v2/groups/{new_group_id}/members",
+            headers=headers,
+            json={"members": [{"email": target}]}
+        )
+        if group_res.status_code not in (200, 201, 409) and "already" not in group_res.text.lower():
+            return {"status": "error", "message": f"Error de Zoom al mover de grupo: {group_res.text}"}
+
+    return {
+        "status": "success",
+        "email": target,
+        "message": f"Se movió al usuario '{target}' a la facultad '{group_name}' (su licencia no cambió)."
+    }

@@ -61,7 +61,11 @@ class AgentOrchestrator:
         matches = re.findall(r'(?:grupo|facultad)\s*(?:es|:)?\s*([^,.;\n]+)', message, flags=re.IGNORECASE)
         if matches:
             candidate = matches[-1].strip()
-            candidate = re.sub(r'\s*\b(no|sino|es)\b\s*$', '', candidate, flags=re.IGNORECASE).strip()
+            # Quitar muletillas finales sueltas (una a la vez basta para los casos reales vistos)
+            candidate = re.sub(
+                r'\s*\b(no|sino|es|tambien|también|porfavor|por favor|porfa|gracias|ahora|ya)\b\s*$',
+                '', candidate, flags=re.IGNORECASE
+            ).strip()
             if candidate:
                 return candidate
         m = re.search(r'sino(?:\s+a\s+la|\s+al)?\s+([^,.;\n]+)', message, flags=re.IGNORECASE)
@@ -414,12 +418,24 @@ REPORTE DE FORMATO:
                 if pending_creation:
                     PENDING_CONFIRMATIONS.pop(pending_creation[0], None)
 
-                tool_args = {"email": target_email}
+                # Si el mismo mensaje TAMBIÉN pide un grupo/facultad ("quitar licencia Y
+                # asignarlo al grupo X"), remove_user_license no puede tocar el grupo — hay
+                # que usar create_zoom_user (type=1/Basic + group_name) para hacer ambas cosas
+                # de una, en vez de solo la licencia y descartar en silencio la parte del grupo.
+                requested_group = self._extract_group_name(message)
+                if requested_group:
+                    tool_name_to_use = "create_zoom_user"
+                    tool_args = {"email": target_email, "group_name": requested_group, "user_type": 1}
+                    conf_msg = f"¿Confirmas quitar la licencia de Zoom Meetings (Licensed) al usuario '{target_email}' y también asignarlo a la facultad '{requested_group}'?"
+                else:
+                    tool_name_to_use = "remove_user_license"
+                    tool_args = {"email": target_email}
+                    conf_msg = f"¿Confirmas quitar la licencia de Zoom Meetings (Licensed) al usuario '{target_email}' y dejarlo en Basic (sin licencia)?"
+
                 action_id = str(uuid.uuid4())[:8]
-                conf_msg = f"¿Confirmas quitar la licencia de Zoom Meetings (Licensed) al usuario '{target_email}' y dejarlo en Basic (sin licencia)?"
 
                 PENDING_CONFIRMATIONS[action_id] = {
-                    "tool_name": "remove_user_license",
+                    "tool_name": tool_name_to_use,
                     "tool_args": tool_args,
                     "user_context": user_context,
                     "user_email": user_email,
@@ -434,7 +450,7 @@ REPORTE DE FORMATO:
                     "action_id": action_id,
                     "message": prompt_resp,
                     "confirmation_message": conf_msg,
-                    "tool_name": "remove_user_license",
+                    "tool_name": tool_name_to_use,
                     "tool_args": tool_args
                 }
             else:
@@ -447,14 +463,53 @@ REPORTE DE FORMATO:
                     repeat_prompt="Sigo necesitando el correo del docente para poder quitarle la licencia — ¿me lo compartes?"
                 )
 
+        # 5e. Cambiar de grupo/facultad a un usuario puntual, SIN mencionar licencia (si mencionara
+        #     licencia ya lo habría capturado el caso 5c de arriba). Preguntas tipo "¿y su grupo?"
+        #     ya las captura el caso 5b más arriba, así que llegar hasta acá con un grupo nuevo
+        #     realmente extraído significa que es una orden, no una consulta.
+        elif (
+            not is_query_intent and not is_remove_intent
+            and "licencia" not in msg_lower and "agregar" not in msg_lower
+            and "crear" not in msg_lower and "invitar" not in msg_lower
+            and active_email and self._extract_group_name(message)
+        ):
+            target_group = self._extract_group_name(message)
+            if pending_creation:
+                PENDING_CONFIRMATIONS.pop(pending_creation[0], None)
+
+            tool_args = {"email": active_email, "group_name": target_group}
+            action_id = str(uuid.uuid4())[:8]
+            conf_msg = f"¿Confirmas mover al usuario '{active_email}' a la facultad '{target_group}'? (su licencia actual no cambia)"
+
+            PENDING_CONFIRMATIONS[action_id] = {
+                "tool_name": "change_user_group",
+                "tool_args": tool_args,
+                "user_context": user_context,
+                "user_email": user_email,
+                "created_at": time.time()
+            }
+
+            prompt_resp = f"⚠️ **Confirmación requerida**\n\n{conf_msg}"
+            memory_store.save_chat_message(conversation_id, user_email, "assistant", prompt_resp, metadata={"confirmation_required": True, "action_id": action_id})
+
+            return {
+                "status": "confirmation_required",
+                "action_id": action_id,
+                "message": prompt_resp,
+                "confirmation_message": conf_msg,
+                "tool_name": "change_user_group",
+                "tool_args": tool_args
+            }
+
         # 5d. Listado de usuarios PENDIENTES en general (no de un usuario puntual). Se detecta por
         #     palabras presentes ("pendient..." + "usuario/correo/invitación"), no por frase fija,
         #     y va ANTES del caso 6 para que "licencia" no lo desvíe al flujo de crear usuario.
         elif not emails_in_msg and re.search(r'\bpendient', msg_lower) and re.search(r'\b(usuario|usuarios|correo|correos|invitacion|invitaciones|invitación)\b', msg_lower):
             from .tools.system_tools import get_users
             tool_res = await get_users(user_context, status="pending")
-            tools_executed.append({"name": "get_users", "result": tool_res})
+            tools_executed.append({"name": "get_users", "result": tool_res, "list_pending": True})
             content = self._format_tool_result("get_users", tool_res)
+            content += "\n\n🖥️ También te abrí el detalle en tu panel — minimiza el chat para verlo."
 
         # 6. Solicitud de Agregar Licencia / Usuario (no confundir con una consulta/validación).
         #    Usa active_email (correo mencionado recientemente) si el mensaje actual no trae uno
@@ -587,10 +642,16 @@ REPORTE DE FORMATO:
 
         # Si se encontró un usuario puntual vía get_users, se lo señalamos al frontend para que
         # filtre/muestre ese mismo usuario en el panel principal (tabla de Usuarios), no solo en
-        # el chat — así al minimizar el chat ya aparece resaltado en el sistema.
+        # el chat — así al minimizar el chat ya aparece resaltado en el sistema. El listado
+        # GENERAL de pendientes (caso 5d) es distinto: ahí se abre el popup dedicado en vez de
+        # filtrar la tabla por un solo correo cualquiera.
         highlight_email = None
+        open_pending_modal = False
         for t in tools_executed:
             if t.get("name") == "get_users":
+                if t.get("list_pending"):
+                    open_pending_modal = True
+                    continue
                 users = (t.get("result") or {}).get("users_sample") or []
                 if users and users[0].get("email"):
                     highlight_email = users[0]["email"]
@@ -599,7 +660,7 @@ REPORTE DE FORMATO:
         if highlight_email:
             content += f"\n\n🖥️ También lo dejé filtrado en tu panel de Usuarios — minimiza el chat para verlo."
 
-        memory_store.save_chat_message(conversation_id, user_email, "assistant", content, metadata={"tools_executed": [t["name"] for t in tools_executed], "highlight_email": highlight_email})
+        memory_store.save_chat_message(conversation_id, user_email, "assistant", content, metadata={"tools_executed": [t["name"] for t in tools_executed], "highlight_email": highlight_email, "open_pending_modal": open_pending_modal})
 
         exec_ms = int((time.time() - start_time) * 1000)
         return {
@@ -607,6 +668,7 @@ REPORTE DE FORMATO:
             "message": content,
             "tools_executed": tools_executed,
             "highlight_email": highlight_email,
+            "open_pending_modal": open_pending_modal,
             "execution_time_ms": exec_ms
         }
 
